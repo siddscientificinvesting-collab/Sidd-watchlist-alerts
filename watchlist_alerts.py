@@ -36,6 +36,8 @@ WATCHLIST_FILE = ROOT / "watchlist.csv"
 STATE_FILE = ROOT / "state" / "state.json"
 LISTS_FILE = ROOT / "lists.json"                     # per-list alert settings (web app)
 TYPES_FILE = ROOT / "docs" / "alert_types.json"      # announcement types, shared with the web app
+COMPANIES_FILE = ROOT / "docs" / "companies.json"    # industry + market cap for whole-market lists
+MARKET_MAX_ALERTS = 30     # whole-market alerts per run; any beyond this go in one digest message
 LOG_DIR = ROOT / "logs"
 PDF_DIR = ROOT / "pdfs"
 
@@ -93,7 +95,7 @@ def log(msg: str) -> None:
 
 
 # ── watchlist + state ────────────────────────────────────────────────────────
-def load_watchlist() -> list[dict]:
+def load_watchlist(allow_empty: bool = False) -> list[dict]:
     """One entry per stock. A stock in several named watchlists gets all the names in "lists"."""
     stocks: dict[str, dict] = {}
     with open(WATCHLIST_FILE, newline="", encoding="utf-8-sig") as f:
@@ -109,7 +111,7 @@ def load_watchlist() -> list[dict]:
             name = r.get("watchlist", "")
             if name and name not in w["lists"]:
                 w["lists"].append(name)
-    if not stocks:
+    if not stocks and not allow_empty:
         sys.exit("watchlist.csv has no stocks")
     return list(stocks.values())
 
@@ -155,6 +157,27 @@ def list_wants(rule: dict | None, item: dict, kinds: set[str]) -> bool:
         return True
     text = f"{item['category']} {item['subject']} {item['detail']}".lower()
     return any(k.strip().lower() in text for k in rule.get("keywords", []) if k.strip())
+
+
+def load_company_info() -> dict:
+    """NSE symbol -> (industry, market cap in crore), from docs/companies.json."""
+    if not COMPANIES_FILE.exists():
+        return {}
+    d = json.loads(COMPANIES_FILE.read_text(encoding="utf-8-sig"))
+    i = {f: n for n, f in enumerate(d["fields"])}
+    return {r[i["nse"]]: (r[i["industry"]], r[i["mcap_cr"]] or 0) for r in d["rows"] if r[i["nse"]]}
+
+
+def market_wants(rule: dict, item: dict, kinds: set[str], info: dict) -> bool:
+    """Whole-market list: every NSE company, narrowed by industry, market cap and announcement type."""
+    ind, mcap = info.get(item["code"], ("", 0))
+    if rule.get("industries") and ind not in rule["industries"]:
+        return False
+    if rule.get("min_mcap") and mcap < float(rule["min_mcap"]):
+        return False
+    if rule.get("mode", "only") == "all":       # allowed only when narrowed to industries
+        return bool(rule.get("industries")) and list_wants(rule, item, kinds)
+    return list_wants(rule, item, kinds)
 
 
 def load_state() -> dict:
@@ -207,7 +230,8 @@ def nse_session() -> requests.Session:
     return s
 
 
-def fetch_nse(watch: list[dict], days: int) -> tuple[list[dict], requests.Session]:
+def fetch_nse(watch: list[dict], days: int, market: bool = False) -> tuple[list[dict], requests.Session]:
+    """Watchlist filings; with market=True also every other company's filings (marked "market")."""
     by_sym = {w["nse_symbol"]: w for w in watch if w.get("nse_symbol")}
     by_isin = {w["isin"]: w for w in watch if w.get("isin")}
     params = {"index": "equities",
@@ -231,20 +255,23 @@ def fetch_nse(watch: list[dict], days: int) -> tuple[list[dict], requests.Sessio
     items = []
     for a in rows:
         w = by_sym.get((a.get("symbol") or "").upper()) or by_isin.get(a.get("sm_isin") or "")
-        if not w:
+        if not w and not market:
             continue
         try:
             t = datetime.strptime(a["sort_date"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=IST)
         except (KeyError, ValueError):
             t = now_ist()
+        name = w["name"] if w else re.sub(r"\s+(Limited|Ltd\.?)$", "",
+                                          html.unescape(a.get("sm_name") or a.get("symbol") or ""), flags=re.I)
         items.append({
             "key": f"NSE:{a.get('seq_id') or a.get('dt')}:{a.get('symbol')}",
-            "exchange": "NSE", "stock": w["name"], "code": a.get("symbol", ""),
+            "exchange": "NSE", "stock": name, "code": a.get("symbol", ""),
             "category": html.unescape(a.get("desc", "")), "subject": html.unescape(a.get("desc", "")),
             "detail": html.unescape(a.get("attchmntText") or ""),
-            "url": (a.get("attchmntFile") or "").strip(), "time": t, "lists": w["lists"],
+            "url": (a.get("attchmntFile") or "").strip(), "time": t,
+            "lists": list(w["lists"]) if w else [], "market": not w,
         })
-    log(f"NSE: {len(rows)} market filings, {len(items)} for watchlist")
+    log(f"NSE: {len(rows)} market filings, {sum(not i['market'] for i in items)} for watchlist")
     return items, s
 
 
@@ -301,7 +328,7 @@ def fetch_bse(watch: list[dict], days: int) -> tuple[list[dict], requests.Sessio
                     "category": a.get("CATEGORYNAME") or "", "subject": subj or a.get("NEWSSUB", ""),
                     "detail": html.unescape(a.get("MORE") or a.get("HEADLINE") or ""),
                     "url": BSE_ATTACH[0] + att if att else "", "attach": att, "time": t,
-                    "lists": w["lists"],
+                    "lists": list(w["lists"]), "market": False,
                 })
             got += len(rows)
             total = int((payload.get("Table1") or [{}])[0].get("ROWCNT", 0) or 0)
@@ -482,13 +509,41 @@ def health(state: dict, exchange: str, ok: bool, err: str, dry: bool) -> None:
         log(msg)
 
 
+def send_digest(items: list[dict], dry: bool) -> None:
+    """Whole-market filings beyond MARKET_MAX_ALERTS in one run, as a compact list."""
+    e = html.escape
+    lines = [f"📚 <b>{len(items)} more whole-market filing(s)</b> (too many for separate alerts)"]
+    for it in items:
+        subj = e(it["subject"][:90])
+        if it["url"]:
+            subj = f'<a href="{e(it["url"], quote=True)}">{subj}</a>'
+        lines.append(f"• <b>{e(it['stock'])}</b> · {e(', '.join(it['lists']))}: {subj}")
+    chunks, cur = [], ""
+    for line in lines:
+        if len(cur) + len(line) + 1 > 3900:
+            chunks.append(cur)
+            cur = ""
+        cur += line + "\n"
+    chunks.append(cur)
+    for c in chunks:
+        if dry or not tg_configured():
+            print(re.sub(r"<[^>]+>", "", c))
+        else:
+            tg_text(c)
+            time.sleep(1.1)
+
+
 def cmd_check(args) -> None:
-    watch = load_watchlist()
+    types, rules = load_rules()
+    market_lists = {n: r for n, r in rules.items() if r.get("scope") == "market"}
+    watch = load_watchlist(allow_empty=bool(market_lists))
     state = load_state()
-    log(f"Watchlist: {len(watch)} stocks, looking back {args.days} day(s)")
+    log(f"Watchlist: {len(watch)} stocks, {len(market_lists)} whole-market list(s), "
+        f"looking back {args.days} day(s)")
 
     items, sessions = [], {}
-    for name, fetch in (("NSE", fetch_nse), ("BSE", fetch_bse)):
+    fetchers = (("NSE", lambda w, d: fetch_nse(w, d, market=bool(market_lists))), ("BSE", fetch_bse))
+    for name, fetch in fetchers:
         if name == "BSE" and not BSE_ENABLED:
             log("BSE: switched off (BSE_ENABLED=0)")
             state["fail_streak"]["BSE"] = 0
@@ -500,6 +555,20 @@ def cmd_check(args) -> None:
         except Exception as e:  # keep going with the other exchange
             log(f"{name} FAILED: {e}")
             health(state, name, False, str(e), args.dry_run)
+
+    # decide which lists want each filing; drop other companies' filings no list wants
+    info = load_company_info() if market_lists else {}
+    kept = []
+    for it in items:
+        kinds = item_types(it, types)
+        mine = [n for n in it["lists"] if list_wants(rules.get(n), it, kinds)]
+        market = [n for n, r in market_lists.items() if it["exchange"] == "NSE" and market_wants(r, it, kinds, info)]
+        if it["market"] and not market:
+            continue
+        it["filtered"] = bool(it["lists"]) and not mine and not market
+        it["lists"] = mine + market         # the alert names only the lists that asked for it
+        kept.append(it)
+    items = kept
 
     # an exchange sometimes lists one filing twice under different ids
     uniq, sig = [], set()
@@ -519,23 +588,23 @@ def cmd_check(args) -> None:
         first = by_key.get(it.get("duplicate_of", ""))
         if first:
             first["also_on"] = it["exchange"]
-    types, rules = load_rules()
-    log_rows = []
+    log_rows, digest, market_sent = [], [], 0
     for it in new:
         status = "seeded"
         pdf = None
-        kinds = item_types(it, types)
-        wanted = [n for n in it.get("lists", []) if list_wants(rules.get(n), it, kinds)]
-        filtered = bool(it.get("lists")) and not wanted
-        it["lists"] = wanted                # the alert names only the lists that asked for it
         if it.get("duplicate_of"):
             status = "duplicate"
-        elif filtered:
+        elif it["filtered"]:
             status = "filtered"             # no list containing this stock wants this type
         elif not args.seed:
-            if it["url"]:
-                pdf = download_pdf(it, sessions.get(it["exchange"]) or requests.Session(), pdf_root)
-            status = "sent" if send_alert(it, pdf, args.dry_run) else "failed"
+            if it["market"] and market_sent >= MARKET_MAX_ALERTS:
+                digest.append(it)           # too many for one run: summarised below
+                status = "sent"
+            else:
+                market_sent += it["market"]
+                if it["url"]:
+                    pdf = download_pdf(it, sessions.get(it["exchange"]) or requests.Session(), pdf_root)
+                status = "sent" if send_alert(it, pdf, args.dry_run) else "failed"
         if status != "failed":   # failed sends are retried next run
             state["seen"][it["key"]] = {"t": it["time"].isoformat(), "ex": it["exchange"],
                                         "stock": it["stock"], "w": it.get("words", []),
@@ -548,6 +617,8 @@ def cmd_check(args) -> None:
                          "watchlists": "; ".join(it.get("lists", [])),
                          "found_ist": f"{now_ist():%Y-%m-%d %H:%M}"})
 
+    if digest:
+        send_digest(digest, args.dry_run)
     skipped = sum(r["status"] == "filtered" for r in log_rows)
     if skipped:
         log(f"Skipped {skipped} filing(s) not matching your list filters")

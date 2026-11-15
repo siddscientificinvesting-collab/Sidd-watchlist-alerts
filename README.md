@@ -107,6 +107,14 @@ Old files without the column still work.
   acquisitions/mergers, capacity/expansion, fund raising, credit ratings, management changes, litigation/tax,
   press releases, promoter/insider deals; plus your own words (e.g. `defence, railway`).
 
+**Add a whole industry.** Pick an industry (and optionally "Listed on NSE") in Find companies, then click
+**Add all … to <list>**. Works for any search too.
+
+**Whole-market lists.** **New list → Whole market** follows every NSE company without picking stocks,
+e.g. "All order wins, market cap ≥ ₹1,000 Cr" or "All Aerospace & Defense filings". Choose the announcement types,
+industries and minimum market cap under **Change**. "All announcements" needs at least one industry.
+At most 30 separate whole-market alerts per check; the rest arrive as one summary message.
+
 These settings are saved in `lists.json`. A stock in several lists alerts if any of its lists wants the filing,
 and the alert names only those lists. The types are defined in `docs/alert_types.json`.
 
