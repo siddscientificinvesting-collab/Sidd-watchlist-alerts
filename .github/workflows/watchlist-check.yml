@@ -34,6 +34,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SAVE_PDFS: "0"
+          BSE_ENABLED: "0"
         run: python watchlist_alerts.py check
 
       - name: Save state and log
