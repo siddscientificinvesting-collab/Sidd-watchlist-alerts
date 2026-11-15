@@ -39,6 +39,7 @@ PDF_DIR = ROOT / "pdfs"
 
 SAVE_PDFS = os.getenv("SAVE_PDFS", "1") == "1"
 SEND_PDF_TO_TELEGRAM = os.getenv("SEND_PDF_TO_TELEGRAM", "1") == "1"
+BSE_ENABLED = os.getenv("BSE_ENABLED", "1") == "1"   # BSE blocks some cloud servers
 MAX_PDF_MB = 45            # Telegram bot upload limit is 50 MB
 DUP_WINDOW_MIN = 60        # NSE and BSE copies of one filing land within this many minutes
 DUP_MIN_SIMILARITY = 0.2   # ...and share at least this share of their key words
@@ -189,6 +190,13 @@ def fetch_nse(watch: list[dict], days: int) -> tuple[list[dict], requests.Sessio
 def fetch_bse(watch: list[dict], days: int) -> tuple[list[dict], requests.Session]:
     s = requests.Session()
     s.headers.update(BSE_HEADERS)
+    try:                                    # pick up the cookies a browser would have
+        s.get("https://www.bseindia.com/", timeout=20,
+              headers={"Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+                       "Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate",
+                       "Sec-Fetch-Site": "none"})
+    except requests.RequestException:
+        pass
     frm = f"{now_ist() - timedelta(days=days):%Y%m%d}"
     to = f"{now_ist():%Y%m%d}"
     items, errors = [], 0
@@ -212,6 +220,9 @@ def fetch_bse(watch: list[dict], days: int) -> tuple[list[dict], requests.Sessio
             if payload is None:
                 errors += 1
                 log(f"BSE {w['bse_code']} failed: {err}")
+                status = getattr(getattr(err, "response", None), "status_code", None)
+                if status == 403 and not items:   # blocked, not a one-off: stop wasting time
+                    raise RuntimeError("BSE refused access (403) - this server's IP is blocked")
                 break
             rows = payload.get("Table") or []
             for a in rows:
@@ -412,6 +423,10 @@ def cmd_check(args) -> None:
 
     items, sessions = [], {}
     for name, fetch in (("NSE", fetch_nse), ("BSE", fetch_bse)):
+        if name == "BSE" and not BSE_ENABLED:
+            log("BSE: switched off (BSE_ENABLED=0)")
+            state["fail_streak"]["BSE"] = 0
+            continue
         try:
             got, sessions[name] = fetch(watch, args.days)
             items += got
