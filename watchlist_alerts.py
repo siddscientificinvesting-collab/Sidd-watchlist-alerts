@@ -79,7 +79,7 @@ BSE_ATTACH = ["https://www.bseindia.com/xml-data/corpfiling/AttachLive/",
               "https://www.bseindia.com/xml-data/corpfiling/AttachHis/"]
 
 LOG_FIELDS = ["time_ist", "exchange", "stock", "code", "category", "subject",
-              "detail", "url", "pdf_path", "status", "found_ist"]
+              "detail", "url", "pdf_path", "status", "found_ist", "watchlists"]
 
 
 def now_ist() -> datetime:
@@ -92,17 +92,24 @@ def log(msg: str) -> None:
 
 # ── watchlist + state ────────────────────────────────────────────────────────
 def load_watchlist() -> list[dict]:
-    rows = []
+    """One entry per stock. A stock in several named watchlists gets all the names in "lists"."""
+    stocks: dict[str, dict] = {}
     with open(WATCHLIST_FILE, newline="", encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
             r = {k.strip(): (v or "").strip() for k, v in r.items() if k}
             if not r.get("name") or r["name"].startswith("#"):
                 continue
             r["nse_symbol"] = r.get("nse_symbol", "").upper()
-            rows.append(r)
-    if not rows:
+            key = r.get("isin") or r["nse_symbol"] or r.get("bse_code") or r["name"]
+            w = stocks.setdefault(key, {**r, "lists": []})
+            for k in ("nse_symbol", "bse_code", "isin"):    # fill gaps from a later row
+                w[k] = w.get(k) or r.get(k, "")
+            name = r.get("watchlist", "")
+            if name and name not in w["lists"]:
+                w["lists"].append(name)
+    if not stocks:
         sys.exit("watchlist.csv has no stocks")
-    return rows
+    return list(stocks.values())
 
 
 def load_state() -> dict:
@@ -124,6 +131,16 @@ def append_log(rows: list[dict]) -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     path = LOG_DIR / f"announcements_{now_ist():%Y-%m}.csv"
     new = not path.exists()
+    if not new:                          # log started before a column was added: rewrite it
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            old = list(reader)
+            header = reader.fieldnames or []
+        if header != LOG_FIELDS:
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=LOG_FIELDS, extrasaction="ignore")
+                w.writeheader()
+                w.writerows(old)
     with open(path, "a", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=LOG_FIELDS, extrasaction="ignore")
         if new:
@@ -180,7 +197,7 @@ def fetch_nse(watch: list[dict], days: int) -> tuple[list[dict], requests.Sessio
             "exchange": "NSE", "stock": w["name"], "code": a.get("symbol", ""),
             "category": html.unescape(a.get("desc", "")), "subject": html.unescape(a.get("desc", "")),
             "detail": html.unescape(a.get("attchmntText") or ""),
-            "url": (a.get("attchmntFile") or "").strip(), "time": t,
+            "url": (a.get("attchmntFile") or "").strip(), "time": t, "lists": w["lists"],
         })
     log(f"NSE: {len(rows)} market filings, {len(items)} for watchlist")
     return items, s
@@ -239,6 +256,7 @@ def fetch_bse(watch: list[dict], days: int) -> tuple[list[dict], requests.Sessio
                     "category": a.get("CATEGORYNAME") or "", "subject": subj or a.get("NEWSSUB", ""),
                     "detail": html.unescape(a.get("MORE") or a.get("HEADLINE") or ""),
                     "url": BSE_ATTACH[0] + att if att else "", "attach": att, "time": t,
+                    "lists": w["lists"],
                 })
             got += len(rows)
             total = int((payload.get("Table1") or [{}])[0].get("ROWCNT", 0) or 0)
@@ -323,7 +341,10 @@ def tg_text(text: str) -> bool:
 def format_alert(item: dict, max_len: int) -> str:
     e = html.escape
     code = f"{item['exchange']}: {item['code']}"
-    head = f"🔔 <b>{e(item['stock'])}</b>  ({e(code)})\n<b>{e(item['subject'])}</b>"
+    head = f"🔔 <b>{e(item['stock'])}</b>  ({e(code)})"
+    if item.get("lists"):
+        head += f"\n📋 {e(', '.join(item['lists']))}"
+    head += f"\n<b>{e(item['subject'])}</b>"
     if item["category"] and item["category"] != item["subject"]:
         head += f"\n<i>{e(item['category'])}</i>"
     foot = f"\n🕒 {item['time']:%d-%b %H:%M} IST"
@@ -472,6 +493,7 @@ def cmd_check(args) -> None:
             rel = pdf.relative_to(ROOT).as_posix()
         log_rows.append({**it, "time_ist": f"{it['time']:%Y-%m-%d %H:%M}", "pdf_path": rel,
                          "detail": it["detail"][:500], "status": status,
+                         "watchlists": "; ".join(it.get("lists", [])),
                          "found_ist": f"{now_ist():%Y-%m-%d %H:%M}"})
 
     if args.dry_run:
@@ -528,7 +550,8 @@ def send_telegram_summary(rows: list[dict], since: datetime, bad: list[str], dry
     for r in rows:
         if r["stock"] != stock:
             stock = r["stock"]
-            lines.append(f"\n<b>{e(stock)}</b>")
+            lists = r.get("watchlists") or ""
+            lines.append(f"\n<b>{e(stock)}</b>" + (f"  · 📋 {e(lists.replace(';', ','))}" if lists else ""))
         subj = e(r["subject"][:120])
         if r["url"]:
             subj = f'<a href="{e(r["url"], quote=True)}">{subj}</a>'

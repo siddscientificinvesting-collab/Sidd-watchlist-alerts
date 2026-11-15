@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watchlist Alerts</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f6fed'/><path d='M8 21l5-6 4 3 7-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --line: #e3e6ea; --text: #16191d; --muted: #66707b;
+  --accent: #2f6fed; --accent-soft: #e8efff; --good: #17853b; --good-soft: #e3f5e8;
+  --warn: #a35a00; --warn-soft: #fff1dc; --bad: #c62828; --bad-soft: #fde7e7;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216; --panel: #171b21; --line: #2a3038; --text: #e8ebef; --muted: #96a0ab;
+    --accent: #6c9cff; --accent-soft: #1d2a45; --good: #5fcf83; --good-soft: #15301f;
+    --warn: #f0b056; --warn-soft: #362712; --bad: #ff7b7b; --bad-soft: #3a1818;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+header .repo { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+header .spacer { flex: 1; }
+nav { display: flex; gap: 4px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+nav button { border: 0; background: none; padding: 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; font-weight: 550; }
+nav button.on { color: var(--accent); border-bottom-color: var(--accent); }
+main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:disabled { opacity: .45; cursor: default; }
+.btn.small { padding: 3px 9px; font-size: 13px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.card > .head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.card > .head h2 { font-size: 15px; margin: 0; font-weight: 650; }
+.card > .head .count { color: var(--muted); font-size: 13px; }
+.filters { display: grid; grid-template-columns: 1fr 190px 150px; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.filters input, .filters select, .field input { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+.filters input:focus, .field input:focus, .filters select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.list { max-height: calc(100vh - 290px); min-height: 240px; overflow: auto; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .meta { color: var(--muted); font-size: 12.5px; display: flex; gap: 6px 8px; flex-wrap: wrap; align-items: center; margin-top: 3px; }
+.tag { display: inline-block; white-space: nowrap; line-height: 1.5; font-size: 11.5px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.good { background: var(--good-soft); color: var(--good); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.listbar { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
+.listbar select { flex: 1; min-width: 140px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 8px; font-weight: 600; }
+.tag.inlist { background: var(--good-soft); color: var(--good); }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+.note { margin: 12px 16px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 13px; }
+.status { font-size: 13px; color: var(--muted); }
+.status.ok { color: var(--good); } .status.err { color: var(--bad); }
+.actions { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; align-items: center; }
+.dirty { color: var(--warn); font-weight: 600; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+td.when { white-space: nowrap; color: var(--muted); font-size: 13px; }
+td .sub { font-weight: 600; }
+td .det { color: var(--muted); font-size: 13px; margin-top: 2px; }
+a { color: var(--accent); }
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); padding: 0; width: min(560px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog .body { padding: 18px 20px; display: grid; gap: 14px; }
+dialog h3 { margin: 0; font-size: 16px; }
+.field label { display: block; font-weight: 600; margin-bottom: 4px; }
+.field small { display: block; color: var(--muted); margin-top: 4px; }
+.two { display: grid; grid-template-columns: 1fr 1fr 110px; gap: 8px; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; max-width: calc(100vw - 32px); }
+.toast.show { opacity: 1; }
+@media (max-width: 900px) {
+  .grid { grid-template-columns: 1fr; }
+  .list { max-height: 60vh; }
+  .filters { grid-template-columns: 1fr 1fr; }
+  .filters input { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  header, nav, main { padding-left: 16px; padding-right: 16px; }
+  header .repo { display: none; }
+  .two { grid-template-columns: 1fr; }
+  .hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Watchlist Alerts</h1>
+  <span class="repo" id="repoLabel"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="runBtn" title="Start a check on GitHub now">Run check now</button>
+  <button class="btn" id="settingsBtn">Settings</button>
+</header>
+<nav>
+  <button class="on" data-tab="watch">Watchlist</button>
+  <button data-tab="alerts">Recent alerts</button>
+</nav>
+
+<main>
+  <section id="tab-watch">
+    <div class="grid">
+      <div class="card">
+        <div class="head"><h2>Find companies</h2><span class="count" id="dbInfo">Loading company list…</span></div>
+        <div class="filters">
+          <input id="q" type="search" placeholder="Search by company name, NSE symbol, BSE code or ISIN" autocomplete="off">
+          <select id="ind"><option value="">All industries</option></select>
+          <select id="ex">
+            <option value="any">Any exchange</option>
+            <option value="nse">Listed on NSE</option>
+            <option value="both">On NSE and BSE</option>
+            <option value="bseonly">BSE only</option>
+          </select>
+        </div>
+        <div class="list" id="results"></div>
+      </div>
+
+      <div class="card">
+        <div class="head"><h2>My watchlists</h2><span class="count" id="wlCount"></span><span class="spacer" style="flex:1"></span><span class="dirty" id="dirty" hidden>Unsaved changes</span></div>
+        <div class="listbar">
+          <select id="listSel" aria-label="Watchlist"></select>
+          <button class="btn small" id="newList">New list</button>
+          <button class="btn small" id="renList">Rename</button>
+          <button class="btn small" id="delList">Delete</button>
+        </div>
+        <div class="note" id="bseNote" hidden>Stocks marked <b>BSE only</b> get no alerts while BSE is switched off on GitHub (BSE blocks GitHub's servers). Stocks listed on NSE are covered.</div>
+        <div class="list" id="watch"></div>
+        <div class="actions">
+          <button class="btn primary" id="saveBtn" disabled>Save to GitHub</button>
+          <button class="btn" id="dlBtn">Download CSV</button>
+          <button class="btn" id="reloadBtn">Reload</button>
+          <span class="status" id="saveStatus"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-alerts" hidden>
+    <div class="card">
+      <div class="head">
+        <h2>Recent alerts</h2><span class="count" id="alertCount"></span>
+        <span style="flex:1"></span>
+        <select id="alertStock" class="btn"><option value="">All stocks</option></select>
+        <button class="btn" id="alertReload">Refresh</button>
+      </div>
+      <div class="list" style="max-height:calc(100vh - 210px)" id="alerts"><div class="empty">Loading…</div></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog" class="body" id="settingsForm">
+    <h3>Settings</h3>
+    <div class="field">
+      <label>GitHub repository</label>
+      <div class="two">
+        <input id="sOwner" placeholder="your-username" autocomplete="off">
+        <input id="sRepo" placeholder="Sidd-watchlist-alerts" autocomplete="off">
+        <input id="sBranch" placeholder="main" autocomplete="off">
+      </div>
+      <small>Owner, repository name and branch. Filled in automatically when this page runs on GitHub Pages.</small>
+    </div>
+    <div class="field">
+      <label for="sToken">GitHub access token</label>
+      <input id="sToken" type="password" placeholder="github_pat_…" autocomplete="off">
+      <small>Needed only to save the watchlist and to use "Run check now". Use a fine-grained token limited to this one repository with <b>Contents: Read and write</b> and <b>Actions: Read and write</b>. It is stored only in this browser on this device.</small>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" id="forgetBtn" type="button">Forget token</button>
+      <button class="btn primary" value="ok" id="settingsSave">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const KEY = "wl-settings-v1";
+const FIELDS = ["watchlist", "name", "nse_symbol", "bse_code", "isin"];
+const DEFAULT_LIST = "Main";
+const MAX_RESULTS = 80;
+
+let cfg = loadCfg();
+let companies = [];          // [{name,nse,bse,isin,ind,mcap,alt,hay}]
+let byIsin = new Map(), byNse = new Map(), byBse = new Map();
+let watch = [];              // [{watchlist,name,nse_symbol,bse_code,isin}], one row per stock per list
+let extraLists = [];         // lists created here that have no stocks yet
+let cur = DEFAULT_LIST;      // the list being edited
+let savedCsv = "";           // last CSV read from / written to GitHub
+let watchSha = null;
+
+// ── settings ────────────────────────────────────────────────────────────────
+function loadCfg() {
+  let c = {};
+  try { c = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+  if (!c.owner && location.hostname.endsWith(".github.io")) {
+    c.owner = location.hostname.split(".")[0];
+    c.repo = location.pathname.split("/").filter(Boolean)[0] || "";
+  }
+  c.branch = c.branch || "main";
+  return c;
+}
+function saveCfg() { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} }
+function repoReady() { return cfg.owner && cfg.repo; }
+function showRepo() {
+  $("repoLabel").textContent = repoReady() ? `${cfg.owner}/${cfg.repo} · ${cfg.branch}` : "No repository set";
+}
+
+$("settingsBtn").onclick = openSettings;
+function openSettings() {
+  $("sOwner").value = cfg.owner || ""; $("sRepo").value = cfg.repo || "";
+  $("sBranch").value = cfg.branch || "main"; $("sToken").value = cfg.token || "";
+  $("settings").showModal();
+}
+$("settings").addEventListener("close", () => {
+  if ($("settings").returnValue !== "ok") return;
+  const before = `${cfg.owner}/${cfg.repo}/${cfg.branch}`;
+  cfg.owner = $("sOwner").value.trim(); cfg.repo = $("sRepo").value.trim();
+  cfg.branch = $("sBranch").value.trim() || "main"; cfg.token = $("sToken").value.trim();
+  saveCfg(); showRepo();
+  if (before !== `${cfg.owner}/${cfg.repo}/${cfg.branch}`) { loadCompanies(); loadWatchlist(); }
+  toast("Settings saved");
+});
+$("forgetBtn").onclick = () => { cfg.token = ""; $("sToken").value = ""; saveCfg(); toast("Token removed from this browser"); };
+
+// ── GitHub API ──────────────────────────────────────────────────────────────
+async function gh(path, opts = {}) {
+  const headers = { "Accept": "application/vnd.github+json", ...(opts.headers || {}) };
+  if (cfg.token) headers["Authorization"] = `Bearer ${cfg.token}`;
+  const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}${path}`, { ...opts, headers, cache: "no-store" });
+  if (!r.ok) {
+    let msg = `${r.status}`;
+    try { msg += " " + (await r.json()).message; } catch (e) {}
+    const err = new Error(msg); err.status = r.status; throw err;
+  }
+  return r.status === 204 ? null : r.json();
+}
+const b64ToText = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, "")), (c) => c.charCodeAt(0)));
+function textToB64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+async function getFile(path) {
+  const j = await gh(`/contents/${encodeURI(path)}?ref=${encodeURIComponent(cfg.branch)}`);
+  if (j.content !== undefined && j.content !== "") return { text: b64ToText(j.content), sha: j.sha };
+  const r = await fetch(j.download_url, { cache: "no-store" });       // files over 1 MB
+  return { text: await r.text(), sha: j.sha };
+}
+
+// ── CSV ─────────────────────────────────────────────────────────────────────
+function parseCsv(text) {
+  const rows = []; let row = [], f = "", q = false;
+  text = text.replace(/^﻿/, "");
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(f); f = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(f); f = ""; if (row.some((x) => x !== "")) rows.push(row); row = [];
+    } else f += c;
+  }
+  row.push(f); if (row.some((x) => x !== "")) rows.push(row);
+  if (!rows.length) return [];
+  const head = rows[0].map((h) => h.trim());
+  return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, (r[i] || "").trim()])));
+}
+const csvCell = (v) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+const toCsv = (list) => [FIELDS.join(","), ...list.map((w) => FIELDS.map((k) => csvCell(w[k] || "")).join(","))].join("\n") + "\n";
+
+// ── company database ────────────────────────────────────────────────────────
+async function loadCompanies() {
+  let data = null;
+  for (const url of ["companies.json",
+                     repoReady() && `https://raw.githubusercontent.com/${cfg.owner}/${cfg.repo}/${cfg.branch}/docs/companies.json`]) {
+    if (!url) continue;
+    try { const r = await fetch(url); if (r.ok) { data = await r.json(); break; } } catch (e) {}
+  }
+  if (!data) { $("dbInfo").textContent = "Company list not found. Upload docs/companies.json or set the repository in Settings."; render(); return; }
+  companies = data.rows.map(([name, nse, bse, isin, ind, mcap, alt]) => ({
+    name, nse, bse, isin, ind, mcap, alt,
+    hay: `${name} ${nse} ${bse} ${isin} ${alt}`.toLowerCase(),
+  }));
+  byIsin = new Map(companies.filter((c) => c.isin).map((c) => [c.isin, c]));
+  byNse = new Map(companies.filter((c) => c.nse).map((c) => [c.nse, c]));
+  byBse = new Map(companies.filter((c) => c.bse).map((c) => [c.bse, c]));
+  const inds = [...new Set(companies.map((c) => c.ind).filter(Boolean))].sort();
+  $("ind").innerHTML = '<option value="">All industries</option>' + inds.map((i) => `<option>${esc(i)}</option>`).join("");
+  $("dbInfo").textContent = `${companies.length.toLocaleString("en-IN")} companies · updated ${data.updated}`;
+  render();
+}
+
+// ── watchlist ───────────────────────────────────────────────────────────────
+async function loadWatchlist() {
+  if (!repoReady()) { $("saveStatus").textContent = "Set your repository in Settings."; renderWatch(); return; }
+  $("saveStatus").className = "status"; $("saveStatus").textContent = "Loading watchlist from GitHub…";
+  try {
+    const f = await getFile("watchlist.csv");
+    watchSha = f.sha; savedCsv = f.text;
+    watch = parseCsv(f.text).filter((w) => w.name && !w.name.startsWith("#"))
+                            .map((w) => ({ ...w, watchlist: w.watchlist || DEFAULT_LIST }));
+    savedCsv = toCsv(watch);             // an old file without the watchlist column counts as saved
+    extraLists = [];
+    if (!listNames().includes(cur)) cur = listNames()[0] || DEFAULT_LIST;
+    $("saveStatus").textContent = "";
+  } catch (e) {
+    $("saveStatus").className = "status err";
+    $("saveStatus").textContent = e.status === 404 ? "watchlist.csv not found in the repository." : `Could not load the watchlist (${e.message}).`;
+  }
+  render();
+}
+function listNames() {
+  const names = [];
+  for (const w of watch) if (!names.includes(w.watchlist)) names.push(w.watchlist);
+  for (const n of extraLists) if (!names.includes(n)) names.push(n);
+  return names.length ? names : [DEFAULT_LIST];
+}
+const same = (c, w) => (c.isin && w.isin === c.isin) || (c.nse && w.nse_symbol === c.nse) || (c.bse && w.bse_code === c.bse);
+const listsOf = (c) => [...new Set(watch.filter((w) => same(c, w)).map((w) => w.watchlist))];
+const inWatch = (c) => watch.some((w) => w.watchlist === cur && same(c, w));
+function add(c) {
+  if (inWatch(c)) return;
+  watch.push({ watchlist: cur, name: c.name, nse_symbol: c.nse, bse_code: c.bse, isin: c.isin });
+  render(); toast(`Added ${c.name} to ${cur}`);
+}
+function remove(w) { watch = watch.filter((x) => x !== w); render(); toast(`Removed ${w.name} from ${cur}`); }
+
+const cleanName = (s) => (s || "").replace(/[,;"\n\r]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+$("listSel").onchange = () => { cur = $("listSel").value; render(); };
+$("newList").onclick = () => {
+  const n = cleanName(prompt("Name of the new watchlist (for example: Results season, Capex, Long term):"));
+  if (!n) return;
+  if (listNames().includes(n)) { cur = n; render(); return; }
+  extraLists.push(n); cur = n; render();
+  toast(`Created ${n}. Add stocks, then Save to GitHub.`);
+};
+$("renList").onclick = () => {
+  const n = cleanName(prompt(`New name for "${cur}":`, cur));
+  if (!n || n === cur) return;
+  if (listNames().includes(n) && !confirm(`"${n}" already exists. Merge "${cur}" into it?`)) return;
+  watch.forEach((w) => { if (w.watchlist === cur) w.watchlist = n; });
+  watch = watch.filter((w, i) => watch.findIndex((x) => x.watchlist === w.watchlist && same({ isin: x.isin, nse: x.nse_symbol, bse: x.bse_code }, w)) === i);
+  extraLists = extraLists.map((x) => x === cur ? n : x);
+  cur = n; render();
+};
+$("delList").onclick = () => {
+  const count = watch.filter((w) => w.watchlist === cur).length;
+  if (!confirm(`Delete the watchlist "${cur}"${count ? ` and its ${count} stock(s)` : ""}? Stocks in other lists keep their alerts.`)) return;
+  watch = watch.filter((w) => w.watchlist !== cur);
+  extraLists = extraLists.filter((x) => x !== cur);
+  cur = listNames()[0]; render();
+};
+function lookup(w) { return byIsin.get(w.isin) || byNse.get(w.nse_symbol) || byBse.get(w.bse_code); }
+
+$("saveBtn").onclick = async () => {
+  if (!repoReady()) return openSettings();
+  if (!cfg.token) { toast("Add a GitHub token in Settings to save"); return openSettings(); }
+  const csv = toCsv(watch);
+  $("saveBtn").disabled = true; $("saveStatus").className = "status"; $("saveStatus").textContent = "Saving…";
+  try {
+    try { watchSha = (await gh(`/contents/watchlist.csv?ref=${encodeURIComponent(cfg.branch)}`)).sha; } catch (e) { if (e.status !== 404) throw e; watchSha = null; }
+    const body = { message: `Watchlists: ${listNames().length} lists, ${watch.length} entries (edited in the web app)`, content: textToB64(csv), branch: cfg.branch };
+    if (watchSha) body.sha = watchSha;
+    const j = await gh("/contents/watchlist.csv", { method: "PUT", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
+    watchSha = j.content.sha; savedCsv = csv;
+    $("saveStatus").className = "status ok"; $("saveStatus").textContent = "Saved. The next check uses the new list.";
+  } catch (e) {
+    $("saveStatus").className = "status err";
+    $("saveStatus").textContent = e.status === 401 || e.status === 403 || e.status === 404
+      ? `GitHub refused the save (${e.message}). Check the token has Contents: Read and write for this repository.`
+      : `Save failed: ${e.message}`;
+  }
+  renderWatch();
+};
+$("dlBtn").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([toCsv(watch)], { type: "text/csv" }));
+  a.download = "watchlist.csv"; a.click(); URL.revokeObjectURL(a.href);
+};
+$("reloadBtn").onclick = () => {
+  if (toCsv(watch) !== savedCsv && !confirm("Discard your unsaved changes and reload from GitHub?")) return;
+  loadWatchlist();
+};
+$("runBtn").onclick = async () => {
+  if (!repoReady()) return openSettings();
+  if (!cfg.token) { toast("Add a GitHub token in Settings first"); return openSettings(); }
+  try {
+    await gh("/actions/workflows/watchlist-check.yml/dispatches", { method: "POST", body: JSON.stringify({ ref: cfg.branch }), headers: { "Content-Type": "application/json" } });
+    toast("Check started on GitHub. Alerts arrive on Telegram in about a minute.");
+  } catch (e) {
+    toast(e.status === 403 || e.status === 404 ? "GitHub refused: the token needs Actions: Read and write" : `Could not start: ${e.message}`);
+  }
+};
+window.addEventListener("beforeunload", (e) => { if (savedCsv && toCsv(watch) !== savedCsv) { e.preventDefault(); e.returnValue = ""; } });
+
+// ── rendering ───────────────────────────────────────────────────────────────
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const crore = (v) => !v ? "" : v >= 100000 ? `₹${(v / 100000).toFixed(2)} L Cr` : `₹${Math.round(v).toLocaleString("en-IN")} Cr`;
+function exTags(nse, bse) {
+  return (nse ? `<span class="tag">NSE ${esc(nse)}</span>` : "") +
+         (bse ? ` <span class="tag ${nse ? "" : "warn"}">BSE ${esc(bse)}${nse ? "" : " · BSE only"}</span>` : "");
+}
+
+function search() {
+  const words = $("q").value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const ind = $("ind").value, ex = $("ex").value;
+  const first = words[0] || "";
+  let out = companies.filter((c) =>
+    (!ind || c.ind === ind) &&
+    (ex === "any" || (ex === "nse" && c.nse) || (ex === "both" && c.nse && c.bse) || (ex === "bseonly" && c.bse && !c.nse)) &&
+    words.every((w) => c.hay.includes(w)));
+  if (first) {
+    const rank = (c) => (c.nse.toLowerCase() === first || c.bse === first) ? 0
+      : c.name.toLowerCase().startsWith(first) ? 1 : c.hay.split(" ").some((t) => t.startsWith(first)) ? 2 : 3;
+    out = out.map((c) => [rank(c), c]).sort((a, b) => a[0] - b[0] || b[1].mcap - a[1].mcap).map((x) => x[1]);
+  }
+  return out;
+}
+
+function render() { renderResults(); renderWatch(); }
+
+function renderResults() {
+  if (!companies.length) { $("results").innerHTML = `<div class="empty">No company list loaded yet.</div>`; return; }
+  const all = search(), shown = all.slice(0, MAX_RESULTS);
+  if (!shown.length) { $("results").innerHTML = `<div class="empty">No companies match.</div>`; return; }
+  $("results").innerHTML = shown.map((c, i) => `
+    <div class="row">
+      <div>
+        <div class="name" title="${esc(c.name)}">${esc(c.name)}</div>
+        <div class="meta">${exTags(c.nse, c.bse)}${c.ind ? `<span>${esc(c.ind)}</span>` : ""}${c.mcap ? `<span>${crore(c.mcap)}</span>` : ""}${listsOf(c).filter((n) => n !== cur).map((n) => `<span class="tag inlist">${esc(n)}</span>`).join("")}</div>
+      </div>
+      ${inWatch(c) ? `<span class="tag good">In ${esc(cur)}</span>` : `<button class="btn small" data-add="${i}">Add</button>`}
+    </div>`).join("") +
+    (all.length > MAX_RESULTS ? `<div class="empty">Showing the ${MAX_RESULTS} largest of ${all.length.toLocaleString("en-IN")} matches. Type more to narrow it down.</div>` : "");
+  $("results").querySelectorAll("[data-add]").forEach((b) => b.onclick = () => add(shown[+b.dataset.add]));
+}
+
+function renderWatch() {
+  const names = listNames();
+  if (!names.includes(cur)) cur = names[0];
+  const count = (n) => watch.filter((w) => w.watchlist === n).length;
+  $("listSel").innerHTML = names.map((n) => `<option value="${esc(n)}"${n === cur ? " selected" : ""}>${esc(n)} (${count(n)})</option>`).join("");
+  const stocks = new Set(watch.map((w) => w.isin || w.nse_symbol || w.bse_code)).size;
+  $("wlCount").textContent = `${names.length} list${names.length === 1 ? "" : "s"} · ${stocks} stock${stocks === 1 ? "" : "s"}`;
+  const dirty = savedCsv !== "" && toCsv(watch) !== savedCsv;
+  $("dirty").hidden = !dirty;
+  $("saveBtn").disabled = !dirty;
+  $("delList").disabled = names.length === 1 && !count(cur);
+  const mine = watch.filter((w) => w.watchlist === cur);
+  $("bseNote").hidden = !mine.some((w) => w.bse_code && !w.nse_symbol);
+  if (!mine.length) {
+    $("watch").innerHTML = `<div class="empty">"${esc(cur)}" is empty. Search on the left and click Add.<br>An empty list is not saved until it has at least one stock.</div>`;
+    return;
+  }
+  $("watch").innerHTML = mine.map((w, i) => {
+    const c = lookup(w) || {};
+    const others = listsOf({ isin: w.isin, nse: w.nse_symbol, bse: w.bse_code }).filter((n) => n !== cur);
+    return `<div class="row">
+      <div>
+        <div class="name" title="${esc(w.name)}">${esc(w.name)}</div>
+        <div class="meta">${exTags(w.nse_symbol, w.bse_code)}${c.ind ? `<span class="hide-sm">${esc(c.ind)}</span>` : ""}${others.map((n) => `<span class="tag inlist">${esc(n)}</span>`).join("")}</div>
+      </div>
+      <button class="btn small" data-rm="${i}" title="Remove from ${esc(cur)}">Remove</button>
+    </div>`;
+  }).join("");
+  $("watch").querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => remove(mine[+b.dataset.rm]));
+}
+
+let timer;
+$("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(renderResults, 120); });
+$("ind").onchange = renderResults; $("ex").onchange = renderResults;
+
+// ── recent alerts ───────────────────────────────────────────────────────────
+let alertRows = [];
+async function loadAlerts() {
+  if (!repoReady()) { $("alerts").innerHTML = `<div class="empty">Set your repository in Settings.</div>`; return; }
+  $("alerts").innerHTML = `<div class="empty">Loading…</div>`;
+  const now = new Date(Date.now() + 330 * 60000);   // IST
+  const months = [0, 1].map((k) => { const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`; });
+  alertRows = [];
+  for (const m of months) {
+    try { alertRows.push(...parseCsv((await getFile(`logs/announcements_${m}.csv`)).text)); }
+    catch (e) { if (e.status !== 404) { $("alerts").innerHTML = `<div class="empty">Could not load alerts (${esc(e.message)}).</div>`; return; } }
+  }
+  alertRows = alertRows.filter((r) => r.status === "sent" || r.status === "failed")
+                       .sort((a, b) => (b.time_ist || "").localeCompare(a.time_ist || ""));
+  const stocks = [...new Set(alertRows.map((r) => r.stock))].sort();
+  const keep = $("alertStock").value;
+  $("alertStock").innerHTML = '<option value="">All stocks</option>' + stocks.map((s) => `<option${s === keep ? " selected" : ""}>${esc(s)}</option>`).join("");
+  renderAlerts();
+}
+function renderAlerts() {
+  const s = $("alertStock").value;
+  const rows = alertRows.filter((r) => !s || r.stock === s);
+  $("alertCount").textContent = `${rows.length} in the last two months`;
+  if (!rows.length) { $("alerts").innerHTML = `<div class="empty">No alerts yet.</div>`; return; }
+  $("alerts").innerHTML = `<table><thead><tr><th>Filed (IST)</th><th>Stock</th><th>Filing</th><th class="hide-sm">Exch.</th></tr></thead><tbody>` +
+    rows.slice(0, 500).map((r) => `<tr>
+      <td class="when">${esc(r.time_ist)}</td>
+      <td>${esc(r.stock)}${r.watchlists ? `<div class="det">Lists: ${esc(r.watchlists)}</div>` : ""}</td>
+      <td><div class="sub">${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.subject || r.category)}</a>` : esc(r.subject || r.category)}${r.status === "failed" ? ' <span class="tag bad">not sent</span>' : ""}</div>
+          ${r.detail && r.detail !== r.subject ? `<div class="det">${esc(r.detail.slice(0, 260))}${r.detail.length > 260 ? "…" : ""}</div>` : ""}</td>
+      <td class="hide-sm"><span class="tag">${esc(r.exchange)}</span></td></tr>`).join("") + `</tbody></table>`;
+}
+$("alertStock").onchange = renderAlerts;
+$("alertReload").onclick = loadAlerts;
+
+// ── tabs + toast ────────────────────────────────────────────────────────────
+let alertsLoaded = false;
+document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
+  $("tab-watch").hidden = b.dataset.tab !== "watch";
+  $("tab-alerts").hidden = b.dataset.tab !== "alerts";
+  if (b.dataset.tab === "alerts" && !alertsLoaded) { alertsLoaded = true; loadAlerts(); }
+});
+let toastTimer;
+function toast(msg) { $("toast").textContent = msg; $("toast").classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").classList.remove("show"), 2600); }
+
+showRepo();
+loadCompanies();
+loadWatchlist();
+if (!repoReady()) setTimeout(openSettings, 300);
+</script>
+</body>
+</html>
