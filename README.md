@@ -101,6 +101,15 @@ Each Telegram alert shows the list(s) the stock is in. It also has a **Recent al
 `watchlist.csv` now has a `watchlist` column (the list name). A stock in two lists has two rows.
 Old files without the column still work.
 
+**Alert filters per list.** Under the list name, **Alerts for this list → Change** lets you choose:
+- **All announcements** (optionally skipping routine filings such as newspaper ads and trading-window notices), or
+- **Only selected types**: orders & contracts, results, board outcomes, earnings calls, dividends/bonus/split/buyback,
+  acquisitions/mergers, capacity/expansion, fund raising, credit ratings, management changes, litigation/tax,
+  press releases, promoter/insider deals; plus your own words (e.g. `defence, railway`).
+
+These settings are saved in `lists.json`. A stock in several lists alerts if any of its lists wants the filing,
+and the alert names only those lists. The types are defined in `docs/alert_types.json`.
+
 To refresh the company list (new listings), run on your PC and upload `docs/companies.json` again:
 ```
 python build_companies.py

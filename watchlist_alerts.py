@@ -34,6 +34,8 @@ IST = timezone(timedelta(hours=5, minutes=30))
 ROOT = Path(__file__).resolve().parent
 WATCHLIST_FILE = ROOT / "watchlist.csv"
 STATE_FILE = ROOT / "state" / "state.json"
+LISTS_FILE = ROOT / "lists.json"                     # per-list alert settings (web app)
+TYPES_FILE = ROOT / "docs" / "alert_types.json"      # announcement types, shared with the web app
 LOG_DIR = ROOT / "logs"
 PDF_DIR = ROOT / "pdfs"
 
@@ -110,6 +112,49 @@ def load_watchlist() -> list[dict]:
     if not stocks:
         sys.exit("watchlist.csv has no stocks")
     return list(stocks.values())
+
+
+def load_rules() -> tuple[dict, dict]:
+    """Announcement types (docs/alert_types.json) and each list's alert settings (lists.json).
+
+    lists.json: {"Order book": {"mode": "only", "types": ["orders"], "keywords": ["defence"]},
+                 "Main": {"mode": "all", "skip_routine": true}}
+    A list that is not in lists.json gets every announcement.
+    """
+    types = {}
+    if TYPES_FILE.exists():
+        d = json.loads(TYPES_FILE.read_text(encoding="utf-8-sig"))
+        for t in d.get("types", []) + [{**d["routine"], "id": "routine"}] * ("routine" in d):
+            types[t["id"]] = {
+                "cats": [c.lower() for c in t.get("categories", [])],
+                "inc": re.compile(t["include"], re.I) if t.get("include") else None,
+                "exc": re.compile(t["exclude"], re.I) if t.get("exclude") else None,
+            }
+    lists = {}
+    if LISTS_FILE.exists():
+        lists = json.loads(LISTS_FILE.read_text(encoding="utf-8-sig")).get("lists", {})
+    return types, lists
+
+
+def item_types(item: dict, types: dict) -> set[str]:
+    cat = f"{item['category']} {item['subject']}".lower()
+    text = f"{cat} {item['detail']}"
+    found = set()
+    for tid, t in types.items():
+        if any(c in cat for c in t["cats"]):
+            found.add(tid)
+        elif t["inc"] and t["inc"].search(text) and not (t["exc"] and t["exc"].search(text)):
+            found.add(tid)
+    return found
+
+
+def list_wants(rule: dict | None, item: dict, kinds: set[str]) -> bool:
+    if not rule or rule.get("mode", "all") == "all":
+        return not (rule and rule.get("skip_routine") and "routine" in kinds)
+    if kinds & set(rule.get("types", [])):
+        return True
+    text = f"{item['category']} {item['subject']} {item['detail']}".lower()
+    return any(k.strip().lower() in text for k in rule.get("keywords", []) if k.strip())
 
 
 def load_state() -> dict:
@@ -474,12 +519,19 @@ def cmd_check(args) -> None:
         first = by_key.get(it.get("duplicate_of", ""))
         if first:
             first["also_on"] = it["exchange"]
+    types, rules = load_rules()
     log_rows = []
     for it in new:
         status = "seeded"
         pdf = None
+        kinds = item_types(it, types)
+        wanted = [n for n in it.get("lists", []) if list_wants(rules.get(n), it, kinds)]
+        filtered = bool(it.get("lists")) and not wanted
+        it["lists"] = wanted                # the alert names only the lists that asked for it
         if it.get("duplicate_of"):
             status = "duplicate"
+        elif filtered:
+            status = "filtered"             # no list containing this stock wants this type
         elif not args.seed:
             if it["url"]:
                 pdf = download_pdf(it, sessions.get(it["exchange"]) or requests.Session(), pdf_root)
@@ -496,6 +548,9 @@ def cmd_check(args) -> None:
                          "watchlists": "; ".join(it.get("lists", [])),
                          "found_ist": f"{now_ist():%Y-%m-%d %H:%M}"})
 
+    skipped = sum(r["status"] == "filtered" for r in log_rows)
+    if skipped:
+        log(f"Skipped {skipped} filing(s) not matching your list filters")
     if args.dry_run:
         log(f"Dry run: nothing saved. PDFs (if any) are in {pdf_root}")
         return
