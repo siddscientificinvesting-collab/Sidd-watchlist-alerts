@@ -21,6 +21,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 button, input, select { font: inherit; color: inherit; }
@@ -56,6 +57,13 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .tag.bad { background: var(--bad-soft); color: var(--bad); }
 .listbar { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
 .listbar select { flex: 1; min-width: 140px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 8px; font-weight: 600; }
+.bulkbar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--accent-soft); font-size: 13px; }
+.indboxes { max-height: 190px; overflow: auto; padding: 2px; }
+#indBoxes label { display: flex; font-weight: 400; margin: 0; text-align: left; }
+#indBoxes input { width: auto; flex: none; padding: 0; }
+.market { padding: 16px; display: grid; gap: 8px; }
+.market b { font-weight: 650; }
+.tag.mkt { background: var(--warn-soft); color: var(--warn); }
 .rulebar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .rulebar b { color: var(--text); font-weight: 600; }
 .choice { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
@@ -131,6 +139,10 @@ dialog h3 { margin: 0; font-size: 16px; }
             <option value="bseonly">BSE only</option>
           </select>
         </div>
+        <div class="bulkbar" id="bulkBar" hidden>
+          <span id="bulkText"></span>
+          <button class="btn small primary" id="addAll">Add all</button>
+        </div>
         <div class="list" id="results"></div>
       </div>
 
@@ -199,8 +211,17 @@ dialog h3 { margin: 0; font-size: 16px; }
 <dialog id="ruleDlg">
   <form method="dialog" class="body">
     <h3>Alerts for "<span id="ruleList"></span>"</h3>
+    <div id="marketBox" class="field" hidden>
+      <label>Which companies (whole market, NSE)</label>
+      <div class="two" style="grid-template-columns: 1fr 160px">
+        <input id="indFilter" type="search" placeholder="Filter industries…" autocomplete="off">
+        <input id="minMcap" type="number" min="0" step="100" placeholder="Min mcap ₹ Cr">
+      </div>
+      <div class="types indboxes" id="indBoxes"></div>
+      <small>No industry ticked = every industry. Minimum market cap is optional (e.g. 1000 = ₹1,000 Cr and above).</small>
+    </div>
     <label class="choice"><input type="radio" name="mode" value="all" id="modeAll">
-      <span><b>All announcements</b><small>Every filing by stocks in this list.</small></span></label>
+      <span><b>All announcements</b><small id="allHint">Every filing by stocks in this list.</small></span></label>
     <label style="display:flex; gap:8px; align-items:center; margin-left:30px; font-size:13px">
       <input type="checkbox" id="skipRoutine"> Skip routine filings (newspaper ads, trading window, share-certificate notices)</label>
     <label class="choice"><input type="radio" name="mode" value="only" id="modeOnly">
@@ -217,6 +238,24 @@ dialog h3 { margin: 0; font-size: 16px; }
     <div style="display:flex; gap:8px; justify-content:flex-end">
       <button class="btn" value="cancel" formnovalidate>Cancel</button>
       <button class="btn primary" value="ok">Done</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="newDlg">
+  <form method="dialog" class="body">
+    <h3>New watchlist</h3>
+    <div class="field">
+      <label for="newName">Name</label>
+      <input id="newName" placeholder="e.g. Order book, Capex, All defence orders" autocomplete="off" maxlength="40">
+    </div>
+    <label class="choice"><input type="radio" name="kind" value="stocks" id="kindStocks" checked>
+      <span><b>Stocks I pick</b><small>Add companies one by one, or a whole industry at once.</small></span></label>
+    <label class="choice"><input type="radio" name="kind" value="market" id="kindMarket">
+      <span><b>Whole market</b><small>Every NSE company, filtered by announcement type (e.g. all order wins), industry and market cap. No stocks to pick.</small></span></label>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="ok">Create</button>
     </div>
   </form>
 </dialog>
@@ -375,27 +414,47 @@ function listNames() {
   const names = [];
   for (const w of watch) if (!names.includes(w.watchlist)) names.push(w.watchlist);
   for (const n of extraLists) if (!names.includes(n)) names.push(n);
+  for (const [n, r] of Object.entries(rules)) if (r.scope === "market" && !names.includes(n)) names.push(n);
   return names.length ? names : [DEFAULT_LIST];
 }
+const isMarket = (n = cur) => rules[n] && rules[n].scope === "market";
 const same = (c, w) => (c.isin && w.isin === c.isin) || (c.nse && w.nse_symbol === c.nse) || (c.bse && w.bse_code === c.bse);
 const listsOf = (c) => [...new Set(watch.filter((w) => same(c, w)).map((w) => w.watchlist))];
 const inWatch = (c) => watch.some((w) => w.watchlist === cur && same(c, w));
 function add(c) {
-  if (inWatch(c)) return;
+  if (inWatch(c) || isMarket()) return;
   watch.push({ watchlist: cur, name: c.name, nse_symbol: c.nse, bse_code: c.bse, isin: c.isin });
   render(); toast(`Added ${c.name} to ${cur}`);
 }
+$("addAll").onclick = () => {
+  const todo = search().filter((c) => !inWatch(c));
+  if (!todo.length) return;
+  const bseOnly = todo.filter((c) => !c.nse).length;
+  const what = $("ind").value ? `the ${$("ind").value} industry` : "these search results";
+  let msg = `Add all ${todo.length} companies from ${what} to "${cur}"?`;
+  if (bseOnly) msg += `\n\n${bseOnly} of them are BSE only and get no alerts while BSE is switched off. To leave them out, set the exchange filter to "Listed on NSE" first.`;
+  if (!confirm(msg)) return;
+  for (const c of todo) watch.push({ watchlist: cur, name: c.name, nse_symbol: c.nse, bse_code: c.bse, isin: c.isin });
+  render(); toast(`Added ${todo.length} companies to ${cur}`);
+};
 function remove(w) { watch = watch.filter((x) => x !== w); render(); toast(`Removed ${w.name} from ${cur}`); }
 
 const cleanName = (s) => (s || "").replace(/[,;"\n\r]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
-$("listSel").onchange = () => { cur = $("listSel").value; render(); };
-$("newList").onclick = () => {
-  const n = cleanName(prompt("Name of the new watchlist (for example: Results season, Capex, Long term):"));
+$("listSel").onchange = () => { cur = $("listSel").value; render(); };$("newList").onclick = () => { $("newName").value = ""; $("kindStocks").checked = true; $("newDlg").showModal(); };
+$("newDlg").addEventListener("close", () => {
+  if ($("newDlg").returnValue !== "ok") return;
+  const n = cleanName($("newName").value);
   if (!n) return;
-  if (listNames().includes(n)) { cur = n; render(); return; }
-  extraLists.push(n); cur = n; render();
-  toast(`Created ${n}. Add stocks, then Save to GitHub.`);
-};
+  if (listNames().includes(n)) { cur = n; render(); toast(`"${n}" already exists`); return; }
+  cur = n;
+  if ($("kindMarket").checked) {
+    rules[n] = { scope: "market", mode: "only", types: ["orders"], keywords: [] };
+    render(); $("ruleBtn").click();          // choose types / industries straight away
+  } else {
+    extraLists.push(n); render();
+    toast(`Created ${n}. Add stocks, then Save to GitHub.`);
+  }
+});
 $("renList").onclick = () => {
   const n = cleanName(prompt(`New name for "${cur}":`, cur));
   if (!n || n === cur) return;
@@ -473,17 +532,36 @@ async function loadTypes() {
   renderWatch();
 }
 function ruleSummary(r) {
-  if (!r || r.mode !== "only") return r && r.skip_routine ? "All announcements, except routine" : "All announcements";
+  let scope = "";
+  if (r && r.scope === "market") {
+    const inds = r.industries || [];
+    scope = `Whole market${inds.length ? ` (${inds.length <= 2 ? inds.join(", ") : inds.length + " industries"})` : ""}` +
+            `${r.min_mcap ? `, mcap ≥ ₹${Number(r.min_mcap).toLocaleString("en-IN")} Cr` : ""}: `;
+  }
+  if (!r || r.mode !== "only") return scope + (r && r.skip_routine ? "all announcements, except routine" : "all announcements");
   const names = (r.types || []).map((id) => (alertTypes.find((t) => t.id === id) || { label: id }).label);
   const kw = (r.keywords || []).filter(Boolean);
   const parts = [...names, ...(kw.length ? [`words: ${kw.join(", ")}`] : [])];
-  return parts.length ? `Only ${parts.join(" · ")}` : "Only selected types (none chosen: no alerts)";
+  return scope + (parts.length ? `only ${parts.join(" · ")}` : "only selected types (none chosen: no alerts)");
 }
 function syncRuleDlg() { $("onlyBox").disabled = !$("modeOnly").checked; $("skipRoutine").disabled = !$("modeAll").checked; }
 $("modeAll").onchange = syncRuleDlg; $("modeOnly").onchange = syncRuleDlg;
+function renderIndBoxes(selected) {
+  const f = $("indFilter").value.toLowerCase();
+  const inds = [...new Set(companies.map((c) => c.ind).filter(Boolean))].sort();
+  $("indBoxes").innerHTML = inds.map((i) => `<label${f && !i.toLowerCase().includes(f) ? " hidden" : ""}><input type="checkbox" value="${esc(i)}"${selected.includes(i) ? " checked" : ""}> ${esc(i)}</label>`).join("");
+}
+$("indFilter").oninput = () => {
+  const sel = [...$("indBoxes").querySelectorAll("input:checked")].map((i) => i.value);
+  renderIndBoxes(sel);
+};
 $("ruleBtn").onclick = () => {
   const r = rules[cur] || { mode: "all" };
+  const market = r.scope === "market";
   $("ruleList").textContent = cur;
+  $("marketBox").hidden = !market;
+  $("allHint").textContent = market ? "Every filing by companies in the ticked industries (tick at least one industry)." : "Every filing by stocks in this list.";
+  if (market) { $("indFilter").value = ""; $("minMcap").value = r.min_mcap || ""; renderIndBoxes(r.industries || []); }
   $("modeAll").checked = r.mode !== "only"; $("modeOnly").checked = r.mode === "only";
   $("skipRoutine").checked = !!r.skip_routine;
   $("typeBoxes").innerHTML = alertTypes.map((t) => `<label><input type="checkbox" value="${esc(t.id)}"${(r.types || []).includes(t.id) ? " checked" : ""}> ${esc(t.label)}</label>`).join("")
@@ -494,16 +572,30 @@ $("ruleBtn").onclick = () => {
 };
 $("ruleDlg").addEventListener("close", () => {
   if ($("ruleDlg").returnValue !== "ok") return;
+  const market = isMarket();
+  let r;
   if ($("modeAll").checked) {
-    if ($("skipRoutine").checked) rules[cur] = { mode: "all", skip_routine: true }; else delete rules[cur];
+    r = { mode: "all" };
+    if ($("skipRoutine").checked) r.skip_routine = true;
   } else {
-    rules[cur] = {
+    r = {
       mode: "only",
       types: [...$("typeBoxes").querySelectorAll("input:checked")].map((i) => i.value),
       keywords: $("kw").value.split(",").map((s) => s.trim()).filter(Boolean),
     };
   }
-  if (!listNames().includes(cur)) extraLists.push(cur);
+  if (market) {
+    r.scope = "market";
+    r.industries = [...$("indBoxes").querySelectorAll("input:checked")].map((i) => i.value);
+    const m = Number($("minMcap").value);
+    if (m > 0) r.min_mcap = m;
+    if (r.mode === "all" && !r.industries.length) {
+      alert("A whole-market list with all announcements would send hundreds of alerts a day.\nTick at least one industry, or choose \"Only selected types\".");
+      return $("ruleBtn").click();
+    }
+  }
+  if (!market && r.mode === "all" && !r.skip_routine) delete rules[cur]; else rules[cur] = r;
+  if (!market && !listNames().includes(cur)) extraLists.push(cur);
   render(); toast(`Alert settings for ${cur} changed. Save to GitHub to apply.`);
 });
 
@@ -536,8 +628,14 @@ function search() {
 function render() { renderResults(); renderWatch(); }
 
 function renderResults() {
-  if (!companies.length) { $("results").innerHTML = `<div class="empty">No company list loaded yet.</div>`; return; }
+  if (!companies.length) { $("results").innerHTML = `<div class="empty">No company list loaded yet.</div>`; $("bulkBar").hidden = true; return; }
   const all = search(), shown = all.slice(0, MAX_RESULTS);
+  const narrowed = $("ind").value || $("q").value.trim() || $("ex").value !== "any";
+  const todo = all.filter((c) => !inWatch(c)).length;
+  $("bulkBar").hidden = !narrowed || !todo || isMarket() || all.length > 1500;
+  $("bulkText").textContent = `${all.length.toLocaleString("en-IN")} ${$("ind").value ? `companies in ${$("ind").value}` : "matching companies"}` +
+                              (todo < all.length ? ` (${todo} not in ${cur} yet)` : "");
+  $("addAll").textContent = `Add all ${todo} to ${cur}`;
   if (!shown.length) { $("results").innerHTML = `<div class="empty">No companies match.</div>`; return; }
   $("results").innerHTML = shown.map((c, i) => `
     <div class="row">
@@ -545,7 +643,7 @@ function renderResults() {
         <div class="name" title="${esc(c.name)}">${esc(c.name)}</div>
         <div class="meta">${exTags(c.nse, c.bse)}${c.ind ? `<span>${esc(c.ind)}</span>` : ""}${c.mcap ? `<span>${crore(c.mcap)}</span>` : ""}${listsOf(c).filter((n) => n !== cur).map((n) => `<span class="tag inlist">${esc(n)}</span>`).join("")}</div>
       </div>
-      ${inWatch(c) ? `<span class="tag good">In ${esc(cur)}</span>` : `<button class="btn small" data-add="${i}">Add</button>`}
+      ${inWatch(c) ? `<span class="tag good">In ${esc(cur)}</span>` : isMarket() ? "" : `<button class="btn small" data-add="${i}">Add</button>`}
     </div>`).join("") +
     (all.length > MAX_RESULTS ? `<div class="empty">Showing the ${MAX_RESULTS} largest of ${all.length.toLocaleString("en-IN")} matches. Type more to narrow it down.</div>` : "");
   $("results").querySelectorAll("[data-add]").forEach((b) => b.onclick = () => add(shown[+b.dataset.add]));
@@ -555,16 +653,25 @@ function renderWatch() {
   const names = listNames();
   if (!names.includes(cur)) cur = names[0];
   const count = (n) => watch.filter((w) => w.watchlist === n).length;
-  $("listSel").innerHTML = names.map((n) => `<option value="${esc(n)}"${n === cur ? " selected" : ""}>${esc(n)} (${count(n)})</option>`).join("");
+  $("listSel").innerHTML = names.map((n) => `<option value="${esc(n)}"${n === cur ? " selected" : ""}>${esc(n)} (${isMarket(n) ? "whole market" : count(n)})</option>`).join("");
   const stocks = new Set(watch.map((w) => w.isin || w.nse_symbol || w.bse_code)).size;
   $("wlCount").textContent = `${names.length} list${names.length === 1 ? "" : "s"} · ${stocks} stock${stocks === 1 ? "" : "s"}`;
   const dirty = savedCsv !== "" && (toCsv(watch) !== savedCsv || rulesJson() !== savedRules);
   $("ruleText").textContent = ruleSummary(rules[cur]);
   $("dirty").hidden = !dirty;
   $("saveBtn").disabled = !dirty;
-  $("delList").disabled = names.length === 1 && !count(cur);
+  $("delList").disabled = names.length === 1 && !count(cur) && !isMarket();
   const mine = watch.filter((w) => w.watchlist === cur);
   $("bseNote").hidden = !mine.some((w) => w.bse_code && !w.nse_symbol);
+  if (isMarket()) {
+    $("watch").innerHTML = `<div class="market">
+      <span class="tag mkt" style="justify-self:start">Whole market</span>
+      <div>This list follows <b>every NSE-listed company</b>${(rules[cur].industries || []).length ? ` in <b>${esc(rules[cur].industries.join(", "))}</b>` : ""}${rules[cur].min_mcap ? ` with market cap of at least <b>₹${Number(rules[cur].min_mcap).toLocaleString("en-IN")} Cr</b>` : ""}.</div>
+      <div>Alerts on: <b>${esc(ruleSummary(rules[cur]).split(": ").slice(1).join(": "))}</b>.</div>
+      <div class="status">No stocks to pick here. Use <b>Change</b> above to set the announcement types, industries and minimum market cap. At most 30 separate alerts per check; any more arrive as one summary message.</div>
+    </div>`;
+    return;
+  }
   if (!mine.length) {
     $("watch").innerHTML = `<div class="empty">"${esc(cur)}" is empty. Search on the left and click Add.<br>An empty list is not saved until it has at least one stock.</div>`;
     return;
