@@ -1,0 +1,59 @@
+{
+ "fail_streak": {
+  "BSE": 1,
+  "NSE": 0
+ },
+ "last_email": "",
+ "seen": {
+  "NSE:106860340:BBTC": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Bombay Burmah Trading",
+   "t": "2026-11-14T11:57:41+05:30",
+   "w": [
+    "consolidated",
+    "corporation",
+    "dematerialisation",
+    "ended",
+    "extract",
+    "financial",
+    "half",
+    "newspaper",
+    "notice",
+    "physical",
+    "publication",
+    "quarter",
+    "results",
+    "second",
+    "september",
+    "shares",
+    "special",
+    "standalone",
+    "transfer",
+    "unaudited",
+    "window",
+    "year"
+   ]
+  },
+  "NSE:106860424:TNPL": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Tamil Nadu Newsprint",
+   "t": "2026-11-14T13:02:11+05:30",
+   "w": [
+    "ended",
+    "financial",
+    "half",
+    "newspaper",
+    "papers",
+    "publication",
+    "quarter",
+    "results",
+    "september",
+    "unaudited",
+    "year"
+   ]
+  }
+ },
+ "warned": {}
+}
