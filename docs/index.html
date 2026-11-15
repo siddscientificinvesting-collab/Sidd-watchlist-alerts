@@ -56,6 +56,16 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .tag.bad { background: var(--bad-soft); color: var(--bad); }
 .listbar { display: flex; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
 .listbar select { flex: 1; min-width: 140px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 8px; font-weight: 600; }
+.rulebar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.rulebar b { color: var(--text); font-weight: 600; }
+.choice { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.choice input { margin-top: 3px; }
+.choice small { display: block; color: var(--muted); }
+.types { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.types label { display: flex; gap: 6px; align-items: center; font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 8px; }
+fieldset:disabled { opacity: .45; }
+@media (max-width: 520px) { .types { grid-template-columns: 1fr; } }
 .tag.inlist { background: var(--good-soft); color: var(--good); }
 .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
 .note { margin: 12px 16px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 13px; }
@@ -132,6 +142,10 @@ dialog h3 { margin: 0; font-size: 16px; }
           <button class="btn small" id="renList">Rename</button>
           <button class="btn small" id="delList">Delete</button>
         </div>
+        <div class="rulebar">
+          <span>Alerts for this list: <b id="ruleText">All announcements</b></span>
+          <button class="btn small" id="ruleBtn">Change</button>
+        </div>
         <div class="note" id="bseNote" hidden>Stocks marked <b>BSE only</b> get no alerts while BSE is switched off on GitHub (BSE blocks GitHub's servers). Stocks listed on NSE are covered.</div>
         <div class="list" id="watch"></div>
         <div class="actions">
@@ -182,6 +196,31 @@ dialog h3 { margin: 0; font-size: 16px; }
   </form>
 </dialog>
 
+<dialog id="ruleDlg">
+  <form method="dialog" class="body">
+    <h3>Alerts for "<span id="ruleList"></span>"</h3>
+    <label class="choice"><input type="radio" name="mode" value="all" id="modeAll">
+      <span><b>All announcements</b><small>Every filing by stocks in this list.</small></span></label>
+    <label style="display:flex; gap:8px; align-items:center; margin-left:30px; font-size:13px">
+      <input type="checkbox" id="skipRoutine"> Skip routine filings (newspaper ads, trading window, share-certificate notices)</label>
+    <label class="choice"><input type="radio" name="mode" value="only" id="modeOnly">
+      <span><b>Only selected types</b><small>For example, only order wins for an "Order book" list.</small></span></label>
+    <fieldset id="onlyBox">
+      <div class="types" id="typeBoxes"></div>
+      <div class="field">
+        <label for="kw" style="font-size:13px">Also alert when the filing mentions any of these words</label>
+        <input id="kw" placeholder="e.g. defence, railway, data centre" autocomplete="off">
+        <small>Separate words with commas. Leave empty if not needed.</small>
+      </div>
+    </fieldset>
+    <small style="color:var(--muted)">A stock in several lists alerts if any of its lists wants the filing. Click <b>Save to GitHub</b> afterwards.</small>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="ok">Done</button>
+    </div>
+  </form>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -198,6 +237,10 @@ let byIsin = new Map(), byNse = new Map(), byBse = new Map();
 let watch = [];              // [{watchlist,name,nse_symbol,bse_code,isin}], one row per stock per list
 let extraLists = [];         // lists created here that have no stocks yet
 let cur = DEFAULT_LIST;      // the list being edited
+let rules = {};              // lists.json: { listName: {mode, types, keywords, skip_routine} }
+let savedRules = "{}";
+let alertTypes = [];         // from alert_types.json
+const rulesJson = () => JSON.stringify({ lists: Object.fromEntries(Object.entries(rules).filter(([n]) => listNames().includes(n)).sort()) }, null, 1) + "\n";
 let savedCsv = "";           // last CSV read from / written to GitHub
 let watchSha = null;
 
@@ -317,6 +360,9 @@ async function loadWatchlist() {
                             .map((w) => ({ ...w, watchlist: w.watchlist || DEFAULT_LIST }));
     savedCsv = toCsv(watch);             // an old file without the watchlist column counts as saved
     extraLists = [];
+    try { rules = JSON.parse((await getFile("lists.json")).text).lists || {}; }
+    catch (e) { if (e.status !== 404) throw e; rules = {}; }
+    savedRules = rulesJson();
     if (!listNames().includes(cur)) cur = listNames()[0] || DEFAULT_LIST;
     $("saveStatus").textContent = "";
   } catch (e) {
@@ -355,6 +401,8 @@ $("renList").onclick = () => {
   if (!n || n === cur) return;
   if (listNames().includes(n) && !confirm(`"${n}" already exists. Merge "${cur}" into it?`)) return;
   watch.forEach((w) => { if (w.watchlist === cur) w.watchlist = n; });
+  if (rules[cur] && !rules[n]) rules[n] = rules[cur];
+  delete rules[cur];
   watch = watch.filter((w, i) => watch.findIndex((x) => x.watchlist === w.watchlist && same({ isin: x.isin, nse: x.nse_symbol, bse: x.bse_code }, w)) === i);
   extraLists = extraLists.map((x) => x === cur ? n : x);
   cur = n; render();
@@ -364,6 +412,7 @@ $("delList").onclick = () => {
   if (!confirm(`Delete the watchlist "${cur}"${count ? ` and its ${count} stock(s)` : ""}? Stocks in other lists keep their alerts.`)) return;
   watch = watch.filter((w) => w.watchlist !== cur);
   extraLists = extraLists.filter((x) => x !== cur);
+  delete rules[cur];
   cur = listNames()[0]; render();
 };
 function lookup(w) { return byIsin.get(w.isin) || byNse.get(w.nse_symbol) || byBse.get(w.bse_code); }
@@ -371,14 +420,21 @@ function lookup(w) { return byIsin.get(w.isin) || byNse.get(w.nse_symbol) || byB
 $("saveBtn").onclick = async () => {
   if (!repoReady()) return openSettings();
   if (!cfg.token) { toast("Add a GitHub token in Settings to save"); return openSettings(); }
-  const csv = toCsv(watch);
+  const csv = toCsv(watch), rj = rulesJson();
   $("saveBtn").disabled = true; $("saveStatus").className = "status"; $("saveStatus").textContent = "Saving…";
+  async function put(path, text, message) {
+    let sha = null;
+    try { sha = (await gh(`/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`)).sha; } catch (e) { if (e.status !== 404) throw e; }
+    const body = { message, content: textToB64(text), branch: cfg.branch };
+    if (sha) body.sha = sha;
+    return gh(`/contents/${path}`, { method: "PUT", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
+  }
   try {
-    try { watchSha = (await gh(`/contents/watchlist.csv?ref=${encodeURIComponent(cfg.branch)}`)).sha; } catch (e) { if (e.status !== 404) throw e; watchSha = null; }
-    const body = { message: `Watchlists: ${listNames().length} lists, ${watch.length} entries (edited in the web app)`, content: textToB64(csv), branch: cfg.branch };
-    if (watchSha) body.sha = watchSha;
-    const j = await gh("/contents/watchlist.csv", { method: "PUT", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
-    watchSha = j.content.sha; savedCsv = csv;
+    if (rj !== savedRules) { await put("lists.json", rj, "Watchlist alert settings (edited in the web app)"); savedRules = rj; }
+    if (csv !== savedCsv) {
+      const j = await put("watchlist.csv", csv, `Watchlists: ${listNames().length} lists, ${watch.length} entries (edited in the web app)`);
+      watchSha = j.content.sha; savedCsv = csv;
+    }
     $("saveStatus").className = "status ok"; $("saveStatus").textContent = "Saved. The next check uses the new list.";
   } catch (e) {
     $("saveStatus").className = "status err";
@@ -407,7 +463,51 @@ $("runBtn").onclick = async () => {
     toast(e.status === 403 || e.status === 404 ? "GitHub refused: the token needs Actions: Read and write" : `Could not start: ${e.message}`);
   }
 };
-window.addEventListener("beforeunload", (e) => { if (savedCsv && toCsv(watch) !== savedCsv) { e.preventDefault(); e.returnValue = ""; } });
+// ── per-list alert filters ──────────────────────────────────────────────────
+async function loadTypes() {
+  for (const url of ["alert_types.json",
+                     repoReady() && `https://raw.githubusercontent.com/${cfg.owner}/${cfg.repo}/${cfg.branch}/docs/alert_types.json`]) {
+    if (!url) continue;
+    try { const r = await fetch(url); if (r.ok) { alertTypes = (await r.json()).types || []; break; } } catch (e) {}
+  }
+  renderWatch();
+}
+function ruleSummary(r) {
+  if (!r || r.mode !== "only") return r && r.skip_routine ? "All announcements, except routine" : "All announcements";
+  const names = (r.types || []).map((id) => (alertTypes.find((t) => t.id === id) || { label: id }).label);
+  const kw = (r.keywords || []).filter(Boolean);
+  const parts = [...names, ...(kw.length ? [`words: ${kw.join(", ")}`] : [])];
+  return parts.length ? `Only ${parts.join(" · ")}` : "Only selected types (none chosen: no alerts)";
+}
+function syncRuleDlg() { $("onlyBox").disabled = !$("modeOnly").checked; $("skipRoutine").disabled = !$("modeAll").checked; }
+$("modeAll").onchange = syncRuleDlg; $("modeOnly").onchange = syncRuleDlg;
+$("ruleBtn").onclick = () => {
+  const r = rules[cur] || { mode: "all" };
+  $("ruleList").textContent = cur;
+  $("modeAll").checked = r.mode !== "only"; $("modeOnly").checked = r.mode === "only";
+  $("skipRoutine").checked = !!r.skip_routine;
+  $("typeBoxes").innerHTML = alertTypes.map((t) => `<label><input type="checkbox" value="${esc(t.id)}"${(r.types || []).includes(t.id) ? " checked" : ""}> ${esc(t.label)}</label>`).join("")
+    || `<small style="color:var(--muted)">Announcement types not loaded. Upload docs/alert_types.json.</small>`;
+  $("kw").value = (r.keywords || []).join(", ");
+  syncRuleDlg();
+  $("ruleDlg").showModal();
+};
+$("ruleDlg").addEventListener("close", () => {
+  if ($("ruleDlg").returnValue !== "ok") return;
+  if ($("modeAll").checked) {
+    if ($("skipRoutine").checked) rules[cur] = { mode: "all", skip_routine: true }; else delete rules[cur];
+  } else {
+    rules[cur] = {
+      mode: "only",
+      types: [...$("typeBoxes").querySelectorAll("input:checked")].map((i) => i.value),
+      keywords: $("kw").value.split(",").map((s) => s.trim()).filter(Boolean),
+    };
+  }
+  if (!listNames().includes(cur)) extraLists.push(cur);
+  render(); toast(`Alert settings for ${cur} changed. Save to GitHub to apply.`);
+});
+
+window.addEventListener("beforeunload", (e) => { if (savedCsv && (toCsv(watch) !== savedCsv || rulesJson() !== savedRules)) { e.preventDefault(); e.returnValue = ""; } });
 
 // ── rendering ───────────────────────────────────────────────────────────────
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -458,7 +558,8 @@ function renderWatch() {
   $("listSel").innerHTML = names.map((n) => `<option value="${esc(n)}"${n === cur ? " selected" : ""}>${esc(n)} (${count(n)})</option>`).join("");
   const stocks = new Set(watch.map((w) => w.isin || w.nse_symbol || w.bse_code)).size;
   $("wlCount").textContent = `${names.length} list${names.length === 1 ? "" : "s"} · ${stocks} stock${stocks === 1 ? "" : "s"}`;
-  const dirty = savedCsv !== "" && toCsv(watch) !== savedCsv;
+  const dirty = savedCsv !== "" && (toCsv(watch) !== savedCsv || rulesJson() !== savedRules);
+  $("ruleText").textContent = ruleSummary(rules[cur]);
   $("dirty").hidden = !dirty;
   $("saveBtn").disabled = !dirty;
   $("delList").disabled = names.length === 1 && !count(cur);
@@ -533,6 +634,7 @@ let toastTimer;
 function toast(msg) { $("toast").textContent = msg; $("toast").classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").classList.remove("show"), 2600); }
 
 showRepo();
+loadTypes();
 loadCompanies();
 loadWatchlist();
 if (!repoReady()) setTimeout(openSettings, 300);

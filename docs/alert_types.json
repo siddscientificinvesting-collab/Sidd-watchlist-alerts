@@ -1,0 +1,176 @@
+{
+  "_help": "Announcement types a watchlist can be limited to. 'categories' are matched inside the exchange's category/subject (always count). 'include' is a regular expression searched in category + subject + description; 'exclude' cancels an 'include' match (not a category match). All matching ignores case.",
+  "types": [
+    {
+      "id": "orders",
+      "label": "Orders & contracts",
+      "categories": [
+        "bagging/receiving of orders",
+        "awarding of order"
+      ],
+      "include": "letter of (award|acceptance|intent)|\\b(work|purchase|supply|export|new|large|significant|major|repeat) orders?\\b|\\borders? (worth|valued|of rs|of inr|aggregating|received|bagged|secured)|\\b(bag|bags|bagged|secures?|secured|wins?|won|receives?|received|bagging|securing|winning|receipt of)\\b[^.]{0,60}\\b(orders?|contracts?|projects?|mandates?)\\b|\\b(l1|l-1|lowest) bidder|\\bcontracts? (worth|valued|awarded|of rs)",
+      "exclude": "\\b(income tax|tax|gst|nclt|tribunal|court|authority|penalt|demand|sebi|show cause|arbitra|appellate|certified true copy)"
+    },
+    {
+      "id": "results",
+      "label": "Financial results",
+      "categories": [
+        "financial result",
+        "integrated filing- financial",
+        "integrated filing (financial)"
+      ],
+      "include": "financial results?|\\bresults? for the (quarter|half|year|period)|quarterly results|(un)?audited (standalone|consolidated|financial)",
+      "exclude": "newspaper|trading window|intimation of board meeting|prior intimation|con\\. ?call|conference call|earnings call|investor (meet|presentation)|analysts?"
+    },
+    {
+      "id": "board",
+      "label": "Board meeting outcomes",
+      "categories": [
+        "outcome of board meeting"
+      ],
+      "include": "outcome of (the )?board meeting",
+      "exclude": "newspaper"
+    },
+    {
+      "id": "calls",
+      "label": "Earnings calls & investor meets",
+      "categories": [
+        "analysts/institutional investor meet",
+        "investor presentation",
+        "earnings call"
+      ],
+      "include": "earnings call|conference call|con\\. ?call|investor (meet|presentation|day)|analysts? meet|transcript",
+      "exclude": ""
+    },
+    {
+      "id": "dividend",
+      "label": "Dividend, bonus, split, buyback",
+      "categories": [
+        "dividend",
+        "record date",
+        "stock split",
+        "bonus",
+        "buy back",
+        "buyback"
+      ],
+      "include": "\\bdividend|\\bbonus (issue|shares?)|stock split|sub-?division of (equity )?shares|buy-?back",
+      "exclude": ""
+    },
+    {
+      "id": "deals",
+      "label": "Acquisitions, mergers, demergers",
+      "categories": [
+        "acquisition",
+        "amalgamation",
+        "merger",
+        "scheme of arrangement",
+        "sale or disposal",
+        "open offer",
+        "other restructuring"
+      ],
+      "include": "\\bacqui(re|sition|red)|\\bmerger|amalgamation|demerger|scheme of arrangement|open offer|stake sale|divest",
+      "exclude": ""
+    },
+    {
+      "id": "capex",
+      "label": "Capacity, expansion, new business",
+      "categories": [
+        "capacity addition",
+        "commencement of commercial production",
+        "adoption of new line",
+        "product launch"
+      ],
+      "include": "capacity (addition|expansion|enhancement)|expansion|commissioning|commissioned|commercial production|\\bcapex\\b|new (plant|facility|unit)|greenfield|brownfield|product launch",
+      "exclude": ""
+    },
+    {
+      "id": "funds",
+      "label": "Fund raising & allotments",
+      "categories": [
+        "allotment of securities",
+        "issue of securities",
+        "preferential issue",
+        "qip",
+        "rights issue"
+      ],
+      "include": "\\bqip\\b|qualified institutions? placement|preferential (issue|allotment)|rights issue|fund ?raising|raising of funds|issue of warrants",
+      "exclude": "esop|esos|employee stock"
+    },
+    {
+      "id": "rating",
+      "label": "Credit ratings",
+      "categories": [
+        "credit rating"
+      ],
+      "include": "credit rating|rating (upgrade|downgrade|reaffirm)",
+      "exclude": ""
+    },
+    {
+      "id": "management",
+      "label": "Management & director changes",
+      "categories": [
+        "appointment",
+        "resignation",
+        "change in management",
+        "change in director",
+        "cessation",
+        "retirement",
+        "change in auditors",
+        "change in company secretary",
+        "demise"
+      ],
+      "include": "\\bappoint(ment|ed)|\\bresign(ation|ed)|cessation|re-?designation|change in (management|directors?|kmp)",
+      "exclude": ""
+    },
+    {
+      "id": "legal",
+      "label": "Litigation, tax & regulatory actions",
+      "categories": [
+        "pendency of litigation",
+        "action(s) taken or orders passed",
+        "action(s) initiated",
+        "disclosure of material issue",
+        "corporate insolvency",
+        "granting/withdrawal",
+        "disruption of operations"
+      ],
+      "include": "litigation|penalty|show cause|tax demand|demand (order|notice)|tribunal|\\bnclt\\b|search (and|&) seizure|insolvency|\\bfraud\\b",
+      "exclude": ""
+    },
+    {
+      "id": "press",
+      "label": "Press releases & business updates",
+      "categories": [
+        "press release",
+        "monthly business updates"
+      ],
+      "include": "press release|media release|business update",
+      "exclude": ""
+    },
+    {
+      "id": "insider",
+      "label": "Promoter / insider deals & pledges",
+      "categories": [
+        "disclosure under sebi takeover",
+        "insider trading",
+        "sast",
+        "encumbrance"
+      ],
+      "include": "\\bsast\\b|takeover regulations|insider trading|\\bpledg|encumbrance",
+      "exclude": ""
+    }
+  ],
+  "routine": {
+    "label": "Routine filings (newspaper ads, trading window, share-certificate and compliance notices)",
+    "categories": [
+      "copy of newspaper publication",
+      "trading window",
+      "certificate under sebi (depositories",
+      "loss of share certificate",
+      "duplicate share certificate",
+      "statement of deviation",
+      "monitoring agency report"
+    ],
+    "include": "newspaper (publication|advertisement)|closure of trading window|trading window|regulation 74\\s*\\(5\\)|reg\\.? 74\\s*\\(5\\)|loss of (share )?certificate|duplicate share certificate|issue of duplicate"
+  }
+}
