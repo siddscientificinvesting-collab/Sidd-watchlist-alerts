@@ -53,6 +53,19 @@
     "unaudited",
     "year"
    ]
+  },
+  "NSE:106863784:SWSOLAR": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Sterling and Wilson Renewable Energy",
+   "t": "2026-11-17T17:01:38+05:30",
+   "w": [
+    "dispute",
+    "impacting",
+    "litigation",
+    "outcome",
+    "pendency"
+   ]
   }
  },
  "warned": {}
