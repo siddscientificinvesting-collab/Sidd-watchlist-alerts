@@ -4,6 +4,168 @@
   "NSE": 0
  },
  "last_email": "",
+ "revenue": {
+  "ACMESOLAR": {
+   "annual_cr": 2789.2,
+   "fetched": "2026-11-18",
+   "quarter_cr": 887.0,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "ADVAIT": {
+   "annual_cr": 839.4,
+   "fetched": "2026-11-18",
+   "quarter_cr": 220.9,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "ANNU": {
+   "annual_cr": 71.3,
+   "annualised": true,
+   "fetched": "2026-11-18",
+   "quarter_cr": 15.7,
+   "quarter_end": "2026-09-30",
+   "quarters": 2,
+   "source": "NSE standalone"
+  },
+  "ARMEE": {
+   "annual_cr": 698.1,
+   "annualised": true,
+   "fetched": "2026-11-18",
+   "quarter_cr": 73.3,
+   "quarter_end": "2026-09-30",
+   "quarters": 2,
+   "source": "NSE consolidated"
+  },
+  "ASHOKA": {
+   "annual_cr": 6785.9,
+   "fetched": "2026-11-18",
+   "quarter_cr": 1504.6,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "ASTRAZEN": {
+   "annual_cr": 2602.1,
+   "fetched": "2026-11-18",
+   "quarter_cr": 729.1,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE standalone"
+  },
+  "GATEWAY": {
+   "annual_cr": 2223.5,
+   "fetched": "2026-11-18",
+   "quarter_cr": 580.1,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "GLASSWALL": {
+   "fetched": "2026-11-18",
+   "quarter_cr": 107.4,
+   "quarter_end": "2026-06-30",
+   "quarters": 1,
+   "source": "NSE consolidated"
+  },
+  "HDFIRE": {
+   "fetched": "2026-11-18",
+   "quarter_cr": 127.3,
+   "quarter_end": "2026-09-30",
+   "quarters": 1,
+   "source": "NSE consolidated"
+  },
+  "HIRECT": {
+   "annual_cr": 1131.3,
+   "fetched": "2026-11-18",
+   "quarter_cr": 315.7,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "MARKOLINES": {
+   "annual_cr": 360.0,
+   "fetched": "2026-11-18",
+   "quarter_cr": 86.0,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "NEWGEN": {
+   "annual_cr": 1631.9,
+   "fetched": "2026-11-18",
+   "quarter_cr": 422.2,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "OMPOWER": {
+   "annual_cr": 566.1,
+   "annualised": true,
+   "fetched": "2026-11-18",
+   "quarter_cr": 128.3,
+   "quarter_end": "2026-09-30",
+   "quarters": 3,
+   "source": "NSE standalone"
+  },
+  "PACEDIGITK": {
+   "annual_cr": 3104.3,
+   "fetched": "2026-11-18",
+   "quarter_cr": 808.2,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "REFEX": {
+   "annual_cr": 3187.8,
+   "fetched": "2026-11-18",
+   "quarter_cr": 761.3,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "SEAMECLTD": {
+   "annual_cr": 1139.2,
+   "fetched": "2026-11-18",
+   "quarter_cr": 198.1,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "TEXRAIL": {
+   "annual_cr": 3833.0,
+   "fetched": "2026-11-18",
+   "quarter_cr": 867.7,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "TITAGARH": {
+   "annual_cr": 3265.1,
+   "fetched": "2026-11-18",
+   "quarter_cr": 792.6,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "TONBO": {
+   "fetched": "2026-11-18",
+   "quarter_cr": 183.3,
+   "quarter_end": "2026-09-30",
+   "quarters": 1,
+   "source": "NSE consolidated"
+  },
+  "WSI": {
+   "annual_cr": 41.9,
+   "fetched": "2026-11-18",
+   "quarter_cr": 0.0,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  }
+ },
  "seen": {
   "NSE:106860340:BBTC": {
    "ex": "NSE",
@@ -54,6 +216,104 @@
     "year"
    ]
   },
+  "NSE:106863510:NEWGEN": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Newgen Software Technologies",
+   "t": "2026-11-17T12:53:26+05:30",
+   "w": [
+    "accepted",
+    "africa",
+    "automation",
+    "award",
+    "bagging",
+    "contracts",
+    "credit",
+    "customer",
+    "ghana",
+    "implementation",
+    "letter",
+    "located",
+    "management",
+    "orders",
+    "platform",
+    "received",
+    "receiving",
+    "related",
+    "services",
+    "solutions",
+    "support",
+    "west"
+   ]
+  },
+  "NSE:106863566:ASTRAZEN": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "AstraZeneca Pharma India",
+   "t": "2026-11-17T14:07:10+05:30",
+   "w": [
+    "communication",
+    "intent",
+    "letter",
+    "life",
+    "linkedin",
+    "private",
+    "sciences",
+    "strand",
+    "updates"
+   ]
+  },
+  "NSE:106863598:REFEX": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Refex Industries",
+   "t": "2026-11-17T14:40:46+05:30",
+   "w": [
+    "bagging",
+    "bags",
+    "contract",
+    "contracts",
+    "major",
+    "orders",
+    "pond",
+    "power",
+    "producer",
+    "receiving",
+    "utilization"
+   ]
+  },
+  "NSE:106863643:ASTRAZEN": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "AstraZeneca Pharma India",
+   "t": "2026-11-17T15:19:01+05:30",
+   "w": [
+    "communication",
+    "functional",
+    "intent",
+    "letter",
+    "life",
+    "link",
+    "linkedin",
+    "private",
+    "revised",
+    "sciences",
+    "strand",
+    "updates"
+   ]
+  },
+  "NSE:106863733:PACEDIGITK": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Pace Digitek",
+   "t": "2026-11-17T16:25:29+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
   "NSE:106863784:SWSOLAR": {
    "ex": "NSE",
    "paired": false,
@@ -65,6 +325,264 @@
     "litigation",
     "outcome",
     "pendency"
+   ]
+  },
+  "NSE:106863959:ANNU": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Annu Projects",
+   "t": "2026-11-17T18:14:10+05:30",
+   "w": [
+    "corporation",
+    "division",
+    "eastern",
+    "general",
+    "indian",
+    "kolkata",
+    "order",
+    "pipelines",
+    "receipt",
+    "region",
+    "updates",
+    "work"
+   ]
+  },
+  "NSE:106864010:ADVAIT": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Advait Energy Transitions",
+   "t": "2026-11-17T18:36:29+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106864017:ASHOKA": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Ashoka Buildcon",
+   "t": "2026-11-17T18:39:13+05:30",
+   "w": [
+    "authority",
+    "bagging",
+    "contracts",
+    "highways",
+    "india",
+    "national",
+    "nhai",
+    "orders",
+    "project",
+    "receiving"
+   ]
+  },
+  "NSE:106864240:ARMEE": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "ArMee Infotech",
+   "t": "2026-11-17T22:48:47+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106864385:ACMESOLAR": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Acme Solar Holdings",
+   "t": "2026-11-18T08:42:04+05:30",
+   "w": [
+    "agreement",
+    "also",
+    "bagging",
+    "contracts",
+    "execution",
+    "orders",
+    "power",
+    "press",
+    "purchase",
+    "receiving",
+    "release"
+   ]
+  },
+  "NSE:106864577:GATEWAY": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Gateway Distriparks",
+   "t": "2026-11-18T11:07:02+05:30",
+   "w": [
+    "common",
+    "contract",
+    "jnpa",
+    "november",
+    "operate",
+    "press",
+    "rail",
+    "release",
+    "titled",
+    "wins",
+    "yard"
+   ]
+  },
+  "NSE:106864581:HIRECT": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Hirect",
+   "t": "2026-11-18T11:13:29+05:30",
+   "w": [
+    "acceptance",
+    "appx",
+    "chittaranjan",
+    "crore",
+    "electric",
+    "letter",
+    "locomotive",
+    "locomotives",
+    "motors",
+    "november",
+    "order",
+    "press",
+    "receives",
+    "release",
+    "titled",
+    "traction",
+    "works"
+   ]
+  },
+  "NSE:106864758:SEAMECLTD": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Seamec",
+   "t": "2026-11-18T13:06:23+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "india",
+    "installation",
+    "offshore",
+    "orders",
+    "posh",
+    "private",
+    "project",
+    "receiving",
+    "subsea",
+    "undertaking",
+    "works"
+   ]
+  },
+  "NSE:106864773:MARKOLINES": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Markolines Pavement Technologies",
+   "t": "2026-11-18T13:27:20+05:30",
+   "w": [
+    "aggregating",
+    "crore",
+    "november",
+    "orders",
+    "press",
+    "receipt",
+    "release",
+    "titled",
+    "work"
+   ]
+  },
+  "NSE:106864809:GLASSWALL": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Glass Wall Systems (India)",
+   "t": "2026-11-18T14:21:50+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "order",
+    "orders",
+    "receipt",
+    "receiving"
+   ]
+  },
+  "NSE:106864885:OMPOWER": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Om Power Transmission",
+   "t": "2026-11-18T15:24:47+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106864980:TITAGARH": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "TITAGARH RAIL SYSTEMS",
+   "t": "2026-11-18T16:28:12+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106864992:TEXRAIL": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Texmaco Rail & Engineering",
+   "t": "2026-11-18T16:33:38+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106865089:HDFIRE": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "HD Fire Protect",
+   "t": "2026-11-18T17:39:58+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106865340:TONBO": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Tonbo Imaging India",
+   "t": "2026-11-18T19:23:51+05:30",
+   "w": [
+    "bagging",
+    "clip",
+    "contracts",
+    "defence",
+    "ministry",
+    "order",
+    "orders",
+    "receipt",
+    "receiving",
+    "sights",
+    "supply",
+    "thermal",
+    "weapon"
+   ]
+  },
+  "NSE:106865370:WSI": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "W S Industries (I)",
+   "t": "2026-11-18T19:52:38+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
    ]
   }
  },
