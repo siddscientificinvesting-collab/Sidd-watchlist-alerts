@@ -28,6 +28,8 @@ ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "docs" / "companies.json"
 DEFAULT_MAPPING = Path(r"H:\AWork\Ext\WIP\Data Collection_Analytics\Industry Mapping\Industry Mapping.csv")
 NSE_LIST = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
+NSE_SME_LIST = "https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv"
+BSE_SME_GROUPS = ("M", "MT", "MS")      # BSE SME platform groups
 BSE_LIST = "https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w"
 
 
@@ -44,12 +46,19 @@ def num(v) -> float:
 
 
 def load_nse() -> list[dict]:
-    r = requests.get(NSE_LIST, headers={"User-Agent": UA, "Accept": "*/*"}, timeout=60)
-    r.raise_for_status()
-    rows = list(csv.DictReader(io.StringIO(r.content.decode("utf-8-sig"))))
-    rows = [{k.strip(): (v or "").strip() for k, v in x.items() if k} for x in rows]
-    print(f"NSE list: {len(rows)} companies")
-    return rows
+    """NSE mainboard + NSE Emerge (SME) companies; SME rows get "sme": True."""
+    out = []
+    for url, sme in ((NSE_LIST, False), (NSE_SME_LIST, True)):
+        r = requests.get(url, headers={"User-Agent": UA, "Accept": "*/*"}, timeout=60)
+        r.raise_for_status()
+        rows = list(csv.DictReader(io.StringIO(r.content.decode("utf-8-sig"))))
+        rows = [{k.strip().replace("_", " "): (v or "").strip() for k, v in x.items() if k} for x in rows]
+        rows = [x for x in rows if not re.search(r"-RE\d*$", x.get("SYMBOL", ""))]   # rights entitlements
+        for x in rows:
+            x["sme"] = sme
+        print(f"NSE {'SME' if sme else 'mainboard'} list: {len(rows)} companies")
+        out += rows
+    return out
 
 
 def load_bse() -> list[dict]:
@@ -83,16 +92,22 @@ def build(mapping_path: Path) -> list[list]:
         isin = x.get("ISIN NUMBER", "")
         if not isin:
             continue
-        cos[isin] = {"name": clean_name(x.get("NAME OF COMPANY")), "nse": x["SYMBOL"].upper(),
-                     "bse": "", "isin": isin, "ind": "", "mcap": 0.0, "alt": ""}
+        if isin in cos:                              # an ISIN on both boards: keep mainboard
+            continue
+        cos[isin] = {"name": clean_name(re.sub(r"-RE$", "", x.get("NAME OF COMPANY", ""))),
+                     "nse": x["SYMBOL"].upper(), "bse": "", "isin": isin, "ind": "", "mcap": 0.0,
+                     "alt": "", "sme": x["sme"]}
     for x in bse:
         isin = (x.get("ISIN_NUMBER") or "").strip()
         code = str(x.get("SCRIP_CD") or "").strip()
         if not code or not isin.startswith("IN"):
             continue
         c = cos.setdefault(isin, {"name": clean_name(x.get("Issuer_Name") or x.get("Scrip_Name")),
-                                  "nse": "", "bse": "", "isin": isin, "ind": "", "mcap": 0.0, "alt": ""})
+                                  "nse": "", "bse": "", "isin": isin, "ind": "", "mcap": 0.0, "alt": "",
+                                  "sme": False})
         c["bse"] = code
+        if str(x.get("GROUP") or "").strip().upper() in BSE_SME_GROUPS:
+            c["sme"] = True
         c["mcap"] = num(x.get("Mktcap"))
         if not c["alt"]:
             c["alt"] = (x.get("scrip_id") or "").strip()
@@ -107,7 +122,7 @@ def build(mapping_path: Path) -> list[list]:
             if not c["mcap"]:
                 c["mcap"] = num(m.get("Market Capitalization"))
 
-    rows = [[c["name"], c["nse"], c["bse"], c["isin"], c["ind"], c["mcap"], c["alt"]]
+    rows = [[c["name"], c["nse"], c["bse"], c["isin"], c["ind"], c["mcap"], c["alt"], 1 if c["sme"] else 0]
             for c in cos.values() if c["name"]]
     rows.sort(key=lambda r: -r[5])
     return rows
@@ -120,14 +135,14 @@ def main() -> None:
     rows = build(args.mapping)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     data = {"updated": f"{datetime.now(IST):%Y-%m-%d}",
-            "fields": ["name", "nse", "bse", "isin", "industry", "mcap_cr", "alt"],
+            "fields": ["name", "nse", "bse", "isin", "industry", "mcap_cr", "alt", "sme"],
             "rows": rows}
     OUT.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     both = sum(1 for r in rows if r[1] and r[2])
     print(f"Saved {len(rows)} companies to {OUT} "
           f"({both} on both, {sum(1 for r in rows if r[1] and not r[2])} NSE only, "
           f"{sum(1 for r in rows if r[2] and not r[1])} BSE only, "
-          f"{sum(1 for r in rows if r[4])} with industry), {OUT.stat().st_size // 1024} KB")
+          f"{sum(1 for r in rows if r[4])} with industry, {sum(r[7] for r in rows)} SME), {OUT.stat().st_size // 1024} KB")
 
 
 if __name__ == "__main__":

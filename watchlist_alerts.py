@@ -9,8 +9,10 @@ Watchlist alerts for NSE + BSE corporate announcements.
   python watchlist_alerts.py test-telegram    # send a test message
   python watchlist_alerts.py telegram-chat-id # print chat ids that messaged your bot
 
-Settings come from environment variables (GitHub Secrets in the cloud):
+Settings come from environment variables (GitHub Secrets in the cloud, .env on your PC):
   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+  EXCHANGES=NSE,BSE  which exchanges send alerts (GitHub: NSE, PC: BSE - see bse_offline.bat)
+  GITHUB_REPO=owner/repo  PC only: use the watchlist + list settings saved on GitHub
   SMTP_USER, SMTP_PASSWORD, EMAIL_TO  (optional: SMTP_HOST, SMTP_PORT)
   SAVE_PDFS=1  SEND_PDF_TO_TELEGRAM=1  (set to 0 to turn off)
 """
@@ -30,11 +32,36 @@ from pathlib import Path
 
 import requests
 
+import order_value as ov
+
 IST = timezone(timedelta(hours=5, minutes=30))
 ROOT = Path(__file__).resolve().parent
+
+
+def load_env_file(path: Path) -> None:
+    """KEY=VALUE lines from .env (PC runs). Real environment variables win."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
+load_env_file(ROOT / ".env")
+
+# Which exchanges send alerts. GitHub: NSE (BSE blocks GitHub). PC: BSE (see bse_offline.bat).
+EXCHANGES = [x for x in re.split(r"[,\s]+", os.getenv("EXCHANGES", "NSE,BSE").upper()) if x in ("NSE", "BSE")]
+if os.getenv("BSE_ENABLED", "1") == "0" and "BSE" in EXCHANGES:   # older setting, still honoured
+    EXCHANGES.remove("BSE")
+# A BSE-only PC run keeps its own state and log, so it never clashes with GitHub's files.
+RUN_TAG = "" if "NSE" in EXCHANGES else "_bse"
+
 WATCHLIST_FILE = ROOT / "watchlist.csv"
-STATE_FILE = ROOT / "state" / "state.json"
+STATE_FILE = ROOT / "state" / f"state{RUN_TAG}.json"
 LISTS_FILE = ROOT / "lists.json"                     # per-list alert settings (web app)
+GITHUB_COPY_DIR = ROOT / "state" / "from_github"     # PC runs: latest watchlist + settings from GitHub
 TYPES_FILE = ROOT / "docs" / "alert_types.json"      # announcement types, shared with the web app
 COMPANIES_FILE = ROOT / "docs" / "companies.json"    # industry + market cap for whole-market lists
 MARKET_MAX_ALERTS = 30     # whole-market alerts per run; any beyond this go in one digest message
@@ -43,7 +70,6 @@ PDF_DIR = ROOT / "pdfs"
 
 SAVE_PDFS = os.getenv("SAVE_PDFS", "1") == "1"
 SEND_PDF_TO_TELEGRAM = os.getenv("SEND_PDF_TO_TELEGRAM", "1") == "1"
-BSE_ENABLED = os.getenv("BSE_ENABLED", "1") == "1"   # BSE blocks some cloud servers
 MAX_PDF_MB = 45            # Telegram bot upload limit is 50 MB
 DUP_WINDOW_MIN = 60        # NSE and BSE copies of one filing land within this many minutes
 DUP_MIN_SIMILARITY = 0.2   # ...and share at least this share of their key words
@@ -83,7 +109,8 @@ BSE_ATTACH = ["https://www.bseindia.com/xml-data/corpfiling/AttachLive/",
               "https://www.bseindia.com/xml-data/corpfiling/AttachHis/"]
 
 LOG_FIELDS = ["time_ist", "exchange", "stock", "code", "category", "subject",
-              "detail", "url", "pdf_path", "status", "found_ist", "watchlists"]
+              "detail", "url", "pdf_path", "status", "found_ist", "watchlists",
+              "order_cr", "order_pct_annual", "order_pct_quarter"]
 
 
 def now_ist() -> datetime:
@@ -95,6 +122,40 @@ def log(msg: str) -> None:
 
 
 # ── watchlist + state ────────────────────────────────────────────────────────
+def sync_settings_from_github() -> None:
+    """PC runs: use the watchlist.csv and lists.json saved by the web app on GitHub.
+
+    Needs GITHUB_REPO=owner/repo in .env (plus GITHUB_TOKEN for a private repo). The copies go
+    to state/from_github/, so your own local watchlist.csv is never overwritten. If GitHub
+    can't be reached, the last copy (or the local files) is used.
+    """
+    global WATCHLIST_FILE, LISTS_FILE
+    repo = os.getenv("GITHUB_REPO", "").strip()
+    if not repo:
+        return
+    branch = os.getenv("GITHUB_BRANCH", "main")
+    headers = {"Accept": "application/vnd.github.raw+json", "User-Agent": "watchlist-alerts"}
+    if os.getenv("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    GITHUB_COPY_DIR.mkdir(parents=True, exist_ok=True)
+    for name in ("watchlist.csv", "lists.json"):
+        dest = GITHUB_COPY_DIR / name
+        try:
+            r = requests.get(f"https://api.github.com/repos/{repo}/contents/{name}",
+                             params={"ref": branch}, headers=headers, timeout=30)
+            if r.status_code == 404:
+                dest.unlink(missing_ok=True)    # not on GitHub (e.g. no list settings yet)
+                continue
+            r.raise_for_status()
+            dest.write_bytes(r.content)
+        except requests.RequestException as e:
+            log(f"GitHub {name}: could not download ({e}); using the last copy")
+    if (GITHUB_COPY_DIR / "watchlist.csv").exists():
+        WATCHLIST_FILE = GITHUB_COPY_DIR / "watchlist.csv"
+        LISTS_FILE = GITHUB_COPY_DIR / "lists.json"
+        log(f"Settings: watchlist + list settings from GitHub ({repo})")
+
+
 def load_watchlist(allow_empty: bool = False) -> list[dict]:
     """One entry per stock. A stock in several named watchlists gets all the names in "lists"."""
     stocks: dict[str, dict] = {}
@@ -159,6 +220,16 @@ def list_wants(rule: dict | None, item: dict, kinds: set[str]) -> bool:
     return any(k.strip().lower() in text for k in rule.get("keywords", []) if k.strip())
 
 
+def order_size_ok(rule: dict | None, order: dict | None) -> bool:
+    """A list's "order at least X% of revenue" rule. Lists without the rule accept every order."""
+    if not rule or not rule.get("min_order_pct"):
+        return True
+    pct = (order or {}).get("pct_quarter" if rule.get("order_basis") == "quarter" else "pct_annual")
+    if pct is None:                     # value not stated, or revenue unknown
+        return bool(rule.get("keep_unknown_orders", True))
+    return pct >= float(rule["min_order_pct"])
+
+
 def load_company_info() -> dict:
     """NSE symbol -> (industry, market cap in crore), from docs/companies.json."""
     if not COMPANIES_FILE.exists():
@@ -169,7 +240,11 @@ def load_company_info() -> dict:
 
 
 def market_wants(rule: dict, item: dict, kinds: set[str], info: dict) -> bool:
-    """Whole-market list: every NSE company, narrowed by industry, market cap and announcement type."""
+    """Whole-market list: every NSE company, narrowed by board (mainboard / SME), industry,
+    market cap and announcement type. Lists made before the board option are mainboard only."""
+    board = rule.get("board", "main")
+    if (board == "main" and item.get("sme")) or (board == "sme" and not item.get("sme")):
+        return False
     ind, mcap = info.get(item["code"], ("", 0))
     if rule.get("industries") and ind not in rule["industries"]:
         return False
@@ -197,7 +272,7 @@ def append_log(rows: list[dict]) -> None:
     if not rows:
         return
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    path = LOG_DIR / f"announcements_{now_ist():%Y-%m}.csv"
+    path = LOG_DIR / f"announcements{RUN_TAG}_{now_ist():%Y-%m}.csv"
     new = not path.exists()
     if not new:                          # log started before a column was added: rewrite it
         with open(path, newline="", encoding="utf-8") as f:
@@ -250,10 +325,19 @@ def fetch_nse(watch: list[dict], days: int, market: bool = False) -> tuple[list[
             time.sleep(5)
     else:
         raise RuntimeError(f"NSE blocked or down: {last_err}")
+    rows = [(a, False) for a in (data if isinstance(data, list) else data.get("data", []))]
 
-    rows = data if isinstance(data, list) else data.get("data", [])
+    # NSE Emerge (SME) companies file in a separate feed
+    try:
+        r = s.get(NSE_API, params={**params, "index": "sme"}, timeout=40)
+        r.raise_for_status()
+        sme = r.json()
+        rows += [(a, True) for a in (sme if isinstance(sme, list) else sme.get("data", []))]
+    except (requests.RequestException, ValueError) as e:
+        log(f"NSE SME feed failed (mainboard alerts continue): {e}")
+
     items = []
-    for a in rows:
+    for a, is_sme in rows:
         w = by_sym.get((a.get("symbol") or "").upper()) or by_isin.get(a.get("sm_isin") or "")
         if not w and not market:
             continue
@@ -269,9 +353,11 @@ def fetch_nse(watch: list[dict], days: int, market: bool = False) -> tuple[list[
             "category": html.unescape(a.get("desc", "")), "subject": html.unescape(a.get("desc", "")),
             "detail": html.unescape(a.get("attchmntText") or ""),
             "url": (a.get("attchmntFile") or "").strip(), "time": t,
-            "lists": list(w["lists"]) if w else [], "market": not w,
+            "lists": list(w["lists"]) if w else [], "market": not w, "sme": is_sme,
         })
-    log(f"NSE: {len(rows)} market filings, {sum(not i['market'] for i in items)} for watchlist")
+    n_sme = sum(1 for _, x in rows if x)
+    log(f"NSE: {len(rows) - n_sme} mainboard + {n_sme} SME filings, "
+        f"{sum(not i['market'] for i in items)} for watchlist")
     return items, s
 
 
@@ -410,15 +496,47 @@ def tg_text(text: str) -> bool:
                                    "disable_web_page_preview": "true"})
 
 
+def _cr(v: float) -> str:
+    return f"₹{v:,.0f} Cr" if v >= 10 else f"₹{v:,.2f} Cr"
+
+
+def order_line(o: dict) -> str:
+    """💰 Order ₹428 Cr = 11% of annual revenue (₹3,833 Cr) · 49% of Sep-26 quarter (₹868 Cr)"""
+    q_label = ""
+    if o.get("quarter_end"):
+        q_label = datetime.strptime(o["quarter_end"], "%Y-%m-%d").strftime("%b-%y") + " quarter"
+    if o.get("value_cr") is None:
+        rev = []
+        if o.get("annual_cr"):
+            rev.append(f"annual revenue {_cr(o['annual_cr'])}")
+        if o.get("quarter_cr"):
+            rev.append(f"{q_label or 'quarter'} {_cr(o['quarter_cr'])}")
+        return "💰 Order value not stated" + (f" · {', '.join(rev)}" if rev else "")
+    v = o["value_cr"]
+    val = (f"≥{_cr(v)} (size band)" if o.get("note") == "band"
+           else f"≈{_cr(v)} (converted)" if o.get("note") == "fx" else _cr(v))
+    parts = []
+    if o.get("pct_annual") is not None:
+        parts.append(f"{o['pct_annual']:.0f}% of annual revenue ({_cr(o['annual_cr'])}"
+                     f"{', annualised' if o.get('annualised') else ''})")
+    if o.get("pct_quarter") is not None:
+        parts.append(f"{o['pct_quarter']:.0f}% of {q_label or 'last quarter'} ({_cr(o['quarter_cr'])})")
+    if not parts:
+        return f"💰 Order {val} · revenue not available"
+    return f"💰 Order {val} = " + " · ".join(parts)
+
+
 def format_alert(item: dict, max_len: int) -> str:
     e = html.escape
-    code = f"{item['exchange']}: {item['code']}"
+    code = f"{item['exchange']}{' SME' if item.get('sme') else ''}: {item['code']}"
     head = f"🔔 <b>{e(item['stock'])}</b>  ({e(code)})"
     if item.get("lists"):
         head += f"\n📋 {e(', '.join(item['lists']))}"
     head += f"\n<b>{e(item['subject'])}</b>"
     if item["category"] and item["category"] != item["subject"]:
         head += f"\n<i>{e(item['category'])}</i>"
+    if item.get("order") is not None:
+        head += "\n" + e(order_line(item["order"]))
     foot = f"\n🕒 {item['time']:%d-%b %H:%M} IST"
     if item.get("also_on"):
         foot += f"  ·  also filed on {item['also_on']}"
@@ -473,28 +591,37 @@ def mark_duplicates(new_items: list[dict], state: dict) -> None:
     item with at most one similar-worded filing of the same stock on the other
     exchange within DUP_WINDOW_MIN; the later one of the pair is not alerted."""
     window = timedelta(minutes=DUP_WINDOW_MIN)
-    pool = [{"ex": v["ex"], "stock": v["stock"], "t": datetime.fromisoformat(v["t"]),
-             "key": k, "w": v.get("w", []), "paired": v.get("paired", False)}
-            for k, v in state["seen"].items()]
-    for it in sorted(new_items, key=lambda x: (x["time"], x["exchange"] != "NSE")):
+    old = [{"ex": v["ex"], "stock": v["stock"], "t": datetime.fromisoformat(v["t"]),
+            "key": k, "w": v.get("w", []), "paired": v.get("paired", False), "item": None}
+           for k, v in state["seen"].items()]
+    fresh = []
+    for it in new_items:
         it["words"] = key_words(it)
-        best, best_score = None, DUP_MIN_SIMILARITY
-        for p in pool:
-            if (p["paired"] or p["stock"] != it["stock"] or p["ex"] == it["exchange"]
-                    or abs(p["t"] - it["time"]) > window):
+        fresh.append({"ex": it["exchange"], "stock": it["stock"], "t": it["time"],
+                      "key": it["key"], "w": it["words"], "paired": False, "item": it})
+    # score every possible NSE/BSE pair, then pair the closest matches first, so a filing
+    # posted a few minutes after another one can't take its real twin
+    pairs = []
+    for i, a in enumerate(fresh):
+        for b in fresh[i + 1:] + old:
+            gap = abs(a["t"] - b["t"])
+            if b["paired"] or a["stock"] != b["stock"] or a["ex"] == b["ex"] or gap > window:
                 continue
-            score = similarity(p["w"], it["words"])
-            if abs(p["t"] - it["time"]) <= timedelta(minutes=10):
+            score = similarity(a["w"], b["w"])
+            if gap <= timedelta(minutes=10):
                 score += DUP_MIN_SIMILARITY      # near-simultaneous: wording may differ
-            if score >= best_score:
-                best, best_score = p, score
-        if best:
-            best["paired"] = True
-            it["duplicate_of"] = best["key"]
-            if best["key"] in state["seen"]:
-                state["seen"][best["key"]]["paired"] = True
-        pool.append({"ex": it["exchange"], "stock": it["stock"], "t": it["time"],
-                     "key": it["key"], "w": it["words"], "paired": bool(best)})
+            if score >= DUP_MIN_SIMILARITY:
+                pairs.append((-score, gap, a, b))
+    for _, _, a, b in sorted(pairs, key=lambda p: (p[0], p[1])):
+        if a["paired"] or b["paired"]:
+            continue
+        a["paired"] = b["paired"] = True
+        if b["item"] is None:                    # pair with an already-alerted filing
+            first, later = b, a
+            state["seen"][b["key"]]["paired"] = True
+        else:                                    # both new: the later one (NSE wins ties) is skipped
+            first, later = sorted((a, b), key=lambda x: (x["t"], x["ex"] != "NSE"))
+        later["item"]["duplicate_of"] = first["key"]
 
 
 def health(state: dict, exchange: str, ok: bool, err: str, dry: bool) -> None:
@@ -534,27 +661,40 @@ def send_digest(items: list[dict], dry: bool) -> None:
 
 
 def cmd_check(args) -> None:
+    if RUN_TAG:
+        sync_settings_from_github()
     types, rules = load_rules()
     market_lists = {n: r for n, r in rules.items() if r.get("scope") == "market"}
+    if "NSE" not in EXCHANGES:
+        market_lists = {}                   # whole-market lists are NSE-only: GitHub sends those
     watch = load_watchlist(allow_empty=bool(market_lists))
     state = load_state()
-    log(f"Watchlist: {len(watch)} stocks, {len(market_lists)} whole-market list(s), "
-        f"looking back {args.days} day(s)")
+    # BSE-only PC run: also read NSE (no alerts) so a BSE copy of a filing that GitHub
+    # already alerted from NSE is skipped, exactly like a combined run.
+    match_nse = "NSE" not in EXCHANGES and os.getenv("MATCH_NSE", "1") == "1"
+    log(f"Alerts from: {', '.join(EXCHANGES) or 'nothing'}"
+        f"{' (NSE read only to skip repeats)' if match_nse else ''} · watchlist: {len(watch)} stocks, "
+        f"{len(market_lists)} whole-market list(s), looking back {args.days} day(s)")
 
     items, sessions = [], {}
     fetchers = (("NSE", lambda w, d: fetch_nse(w, d, market=bool(market_lists))), ("BSE", fetch_bse))
     for name, fetch in fetchers:
-        if name == "BSE" and not BSE_ENABLED:
-            log("BSE: switched off (BSE_ENABLED=0)")
-            state["fail_streak"]["BSE"] = 0
+        if name not in EXCHANGES and not (name == "NSE" and match_nse):
+            log(f"{name}: not checked here (EXCHANGES={','.join(EXCHANGES)})")
+            state["fail_streak"][name] = 0
             continue
         try:
             got, sessions[name] = fetch(watch, args.days)
+            if name not in EXCHANGES:
+                for it in got:
+                    it["match_only"] = True
             items += got
-            health(state, name, True, "", args.dry_run)
+            if name in EXCHANGES:
+                health(state, name, True, "", args.dry_run)
         except Exception as e:  # keep going with the other exchange
             log(f"{name} FAILED: {e}")
-            health(state, name, False, str(e), args.dry_run)
+            if name in EXCHANGES:
+                health(state, name, False, str(e), args.dry_run)
 
     # decide which lists want each filing; drop other companies' filings no list wants
     info = load_company_info() if market_lists else {}
@@ -565,6 +705,8 @@ def cmd_check(args) -> None:
         market = [n for n, r in market_lists.items() if it["exchange"] == "NSE" and market_wants(r, it, kinds, info)]
         if it["market"] and not market:
             continue
+        it["kinds"] = kinds
+        it["no_lists"] = not it["lists"] and not market     # old watchlist.csv without list names
         it["filtered"] = bool(it["lists"]) and not mine and not market
         it["lists"] = mine + market         # the alert names only the lists that asked for it
         kept.append(it)
@@ -579,31 +721,49 @@ def cmd_check(args) -> None:
             uniq.append(it)
     new = [it for it in uniq if it["key"] not in state["seen"]]
     new.sort(key=lambda x: (x["time"], x["exchange"] != "NSE"))
-    log(f"New filings: {len(new)}")
+    log(f"New filings: {sum(not it.get('match_only') for it in new)}")
     mark_duplicates(new, state)
 
     pdf_root = Path(tempfile.mkdtemp(prefix="wl_pdf_")) if args.dry_run or not SAVE_PDFS else PDF_DIR
     by_key = {it["key"]: it for it in new}
     for it in new:
         first = by_key.get(it.get("duplicate_of", ""))
-        if first:
+        if first and it.get("match_only"):  # GitHub sends the NSE copy, whichever came first
+            first["duplicate_of"] = it["key"]
+            it.pop("duplicate_of")
+        elif first:
             first["also_on"] = it["exchange"]
     log_rows, digest, market_sent = [], [], 0
+    rev_cache = state.setdefault("revenue", {})
+    csv_rev = ov.load_revenue_csv()
     for it in new:
         status = "seeded"
         pdf = None
+        if it.get("match_only"):            # NSE filing GitHub alerts: remember it, nothing else
+            state["seen"][it["key"]] = {"t": it["time"].isoformat(), "ex": it["exchange"],
+                                        "stock": it["stock"], "w": it.get("words", []),
+                                        "paired": bool(it.get("duplicate_of"))}
+            continue
         if it.get("duplicate_of"):
             status = "duplicate"
         elif it["filtered"]:
             status = "filtered"             # no list containing this stock wants this type
         elif not args.seed:
-            if it["market"] and market_sent >= MARKET_MAX_ALERTS:
+            if it["url"]:
+                pdf = download_pdf(it, sessions.get(it["exchange"]) or requests.Session(), pdf_root)
+            if "orders" in it.get("kinds", ()):
+                try:
+                    it["order"] = ov.order_info(it, pdf, sessions.get("NSE"), rev_cache, csv_rev)
+                except Exception as e:      # never lose an alert over the ratio
+                    log(f"  order size check failed: {e}")
+                it["lists"] = [n for n in it["lists"] if order_size_ok(rules.get(n), it.get("order"))]
+            if not it["lists"] and it.get("order") is not None and not it.get("no_lists"):
+                status = "filtered"         # order smaller than every list's minimum
+            elif it["market"] and market_sent >= MARKET_MAX_ALERTS:
                 digest.append(it)           # too many for one run: summarised below
                 status = "sent"
             else:
                 market_sent += it["market"]
-                if it["url"]:
-                    pdf = download_pdf(it, sessions.get(it["exchange"]) or requests.Session(), pdf_root)
                 status = "sent" if send_alert(it, pdf, args.dry_run) else "failed"
         if status != "failed":   # failed sends are retried next run
             state["seen"][it["key"]] = {"t": it["time"].isoformat(), "ex": it["exchange"],
@@ -615,6 +775,9 @@ def cmd_check(args) -> None:
         log_rows.append({**it, "time_ist": f"{it['time']:%Y-%m-%d %H:%M}", "pdf_path": rel,
                          "detail": it["detail"][:500], "status": status,
                          "watchlists": "; ".join(it.get("lists", [])),
+                         "order_cr": (it.get("order") or {}).get("value_cr") or "",
+                         "order_pct_annual": (it.get("order") or {}).get("pct_annual") or "",
+                         "order_pct_quarter": (it.get("order") or {}).get("pct_quarter") or "",
                          "found_ist": f"{now_ist():%Y-%m-%d %H:%M}"})
 
     if digest:
