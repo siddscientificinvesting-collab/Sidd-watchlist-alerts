@@ -1,3 +1,15 @@
 {
- "lists": {}
+ "lists": {
+  "Order Book MB": {
+   "mode": "only",
+   "types": [
+    "orders"
+   ],
+   "keywords": [],
+   "min_order_pct": 30,
+   "scope": "market",
+   "board": "main",
+   "industries": []
+  }
+ }
 }
