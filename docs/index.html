@@ -43,7 +43,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .card > .head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .card > .head h2 { font-size: 15px; margin: 0; font-weight: 650; }
 .card > .head .count { color: var(--muted); font-size: 13px; }
-.filters { display: grid; grid-template-columns: 1fr 190px 150px; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.filters { display: grid; grid-template-columns: 1fr 170px 140px 150px; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .filters input, .filters select, .field input { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 8px 10px; }
 .filters input:focus, .field input:focus, .filters select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .list { max-height: calc(100vh - 290px); min-height: 240px; overflow: auto; }
@@ -138,6 +138,11 @@ dialog h3 { margin: 0; font-size: 16px; }
             <option value="both">On NSE and BSE</option>
             <option value="bseonly">BSE only</option>
           </select>
+          <select id="board" aria-label="Board">
+            <option value="any">Mainboard + SME</option>
+            <option value="main">Mainboard only</option>
+            <option value="sme">SME only</option>
+          </select>
         </div>
         <div class="bulkbar" id="bulkBar" hidden>
           <span id="bulkText"></span>
@@ -213,6 +218,14 @@ dialog h3 { margin: 0; font-size: 16px; }
     <h3>Alerts for "<span id="ruleList"></span>"</h3>
     <div id="marketBox" class="field" hidden>
       <label>Which companies (whole market, NSE)</label>
+      <div style="display:flex; gap:8px; align-items:center; font-size:13px; margin-bottom:8px">
+        Board:
+        <select id="mBoard" style="border:1px solid var(--line); background:var(--bg); border-radius:8px; padding:7px 8px">
+          <option value="main">Mainboard only</option>
+          <option value="sme">SME only</option>
+          <option value="all">Mainboard + SME</option>
+        </select>
+      </div>
       <div class="two" style="grid-template-columns: 1fr 160px">
         <input id="indFilter" type="search" placeholder="Filter industries…" autocomplete="off">
         <input id="minMcap" type="number" min="0" step="100" placeholder="Min mcap ₹ Cr">
@@ -234,6 +247,21 @@ dialog h3 { margin: 0; font-size: 16px; }
         <small>Separate words with commas. Leave empty if not needed.</small>
       </div>
     </fieldset>
+    <div class="field" id="orderBox">
+      <label style="font-size:13px">Order size (for "Orders &amp; contracts" filings)</label>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13px">
+        Only if the order is at least
+        <input id="minPct" type="number" min="0" step="5" placeholder="any" style="width:80px">
+        % of
+        <select id="pctBasis" style="border:1px solid var(--line); background:var(--bg); border-radius:8px; padding:7px 8px">
+          <option value="annual">annual revenue (last 4 quarters)</option>
+          <option value="quarter">last quarter's revenue</option>
+        </select>
+      </div>
+      <label style="display:flex; gap:8px; align-items:center; font-size:13px; margin-top:6px; font-weight:400">
+        <input type="checkbox" id="keepUnknown" style="width:auto"> Still alert when the order value is not stated</label>
+      <small>Every order alert shows its size against both quarterly and annual revenue. Leave the box empty for no minimum.</small>
+    </div>
     <small style="color:var(--muted)">A stock in several lists alerts if any of its lists wants the filing. Click <b>Save to GitHub</b> afterwards.</small>
     <div style="display:flex; gap:8px; justify-content:flex-end">
       <button class="btn" value="cancel" formnovalidate>Cancel</button>
@@ -375,8 +403,8 @@ async function loadCompanies() {
     try { const r = await fetch(url); if (r.ok) { data = await r.json(); break; } } catch (e) {}
   }
   if (!data) { $("dbInfo").textContent = "Company list not found. Upload docs/companies.json or set the repository in Settings."; render(); return; }
-  companies = data.rows.map(([name, nse, bse, isin, ind, mcap, alt]) => ({
-    name, nse, bse, isin, ind, mcap, alt,
+  companies = data.rows.map(([name, nse, bse, isin, ind, mcap, alt, sme]) => ({
+    name, nse, bse, isin, ind, mcap, alt, sme: !!sme,
     hay: `${name} ${nse} ${bse} ${isin} ${alt}`.toLowerCase(),
   }));
   byIsin = new Map(companies.filter((c) => c.isin).map((c) => [c.isin, c]));
@@ -535,14 +563,16 @@ function ruleSummary(r) {
   let scope = "";
   if (r && r.scope === "market") {
     const inds = r.industries || [];
-    scope = `Whole market${inds.length ? ` (${inds.length <= 2 ? inds.join(", ") : inds.length + " industries"})` : ""}` +
+    const b = { sme: "SME", all: "mainboard + SME" }[r.board] || "mainboard";
+    scope = `Whole market, ${b}${inds.length ? ` (${inds.length <= 2 ? inds.join(", ") : inds.length + " industries"})` : ""}` +
             `${r.min_mcap ? `, mcap ≥ ₹${Number(r.min_mcap).toLocaleString("en-IN")} Cr` : ""}: `;
   }
-  if (!r || r.mode !== "only") return scope + (r && r.skip_routine ? "all announcements, except routine" : "all announcements");
+  const size = r && r.min_order_pct ? ` · orders ≥ ${r.min_order_pct}% of ${r.order_basis === "quarter" ? "quarterly" : "annual"} revenue` : "";
+  if (!r || r.mode !== "only") return scope + (r && r.skip_routine ? "all announcements, except routine" : "all announcements") + size;
   const names = (r.types || []).map((id) => (alertTypes.find((t) => t.id === id) || { label: id }).label);
   const kw = (r.keywords || []).filter(Boolean);
   const parts = [...names, ...(kw.length ? [`words: ${kw.join(", ")}`] : [])];
-  return scope + (parts.length ? `only ${parts.join(" · ")}` : "only selected types (none chosen: no alerts)");
+  return scope + (parts.length ? `only ${parts.join(" · ")}` : "only selected types (none chosen: no alerts)") + size;
 }
 function syncRuleDlg() { $("onlyBox").disabled = !$("modeOnly").checked; $("skipRoutine").disabled = !$("modeAll").checked; }
 $("modeAll").onchange = syncRuleDlg; $("modeOnly").onchange = syncRuleDlg;
@@ -561,12 +591,15 @@ $("ruleBtn").onclick = () => {
   $("ruleList").textContent = cur;
   $("marketBox").hidden = !market;
   $("allHint").textContent = market ? "Every filing by companies in the ticked industries (tick at least one industry)." : "Every filing by stocks in this list.";
-  if (market) { $("indFilter").value = ""; $("minMcap").value = r.min_mcap || ""; renderIndBoxes(r.industries || []); }
+  if (market) { $("mBoard").value = r.board || "main"; $("indFilter").value = ""; $("minMcap").value = r.min_mcap || ""; renderIndBoxes(r.industries || []); }
   $("modeAll").checked = r.mode !== "only"; $("modeOnly").checked = r.mode === "only";
   $("skipRoutine").checked = !!r.skip_routine;
   $("typeBoxes").innerHTML = alertTypes.map((t) => `<label><input type="checkbox" value="${esc(t.id)}"${(r.types || []).includes(t.id) ? " checked" : ""}> ${esc(t.label)}</label>`).join("")
     || `<small style="color:var(--muted)">Announcement types not loaded. Upload docs/alert_types.json.</small>`;
   $("kw").value = (r.keywords || []).join(", ");
+  $("minPct").value = r.min_order_pct || "";
+  $("pctBasis").value = r.order_basis === "quarter" ? "quarter" : "annual";
+  $("keepUnknown").checked = r.keep_unknown_orders !== false;
   syncRuleDlg();
   $("ruleDlg").showModal();
 };
@@ -584,8 +617,15 @@ $("ruleDlg").addEventListener("close", () => {
       keywords: $("kw").value.split(",").map((s) => s.trim()).filter(Boolean),
     };
   }
+  const pct = Number($("minPct").value);
+  if (pct > 0) {
+    r.min_order_pct = pct;
+    if ($("pctBasis").value === "quarter") r.order_basis = "quarter";
+    if (!$("keepUnknown").checked) r.keep_unknown_orders = false;
+  }
   if (market) {
     r.scope = "market";
+    r.board = $("mBoard").value;
     r.industries = [...$("indBoxes").querySelectorAll("input:checked")].map((i) => i.value);
     const m = Number($("minMcap").value);
     if (m > 0) r.min_mcap = m;
@@ -594,7 +634,7 @@ $("ruleDlg").addEventListener("close", () => {
       return $("ruleBtn").click();
     }
   }
-  if (!market && r.mode === "all" && !r.skip_routine) delete rules[cur]; else rules[cur] = r;
+  if (!market && r.mode === "all" && !r.skip_routine && !r.min_order_pct) delete rules[cur]; else rules[cur] = r;
   if (!market && !listNames().includes(cur)) extraLists.push(cur);
   render(); toast(`Alert settings for ${cur} changed. Save to GitHub to apply.`);
 });
@@ -611,10 +651,11 @@ function exTags(nse, bse) {
 
 function search() {
   const words = $("q").value.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  const ind = $("ind").value, ex = $("ex").value;
+  const ind = $("ind").value, ex = $("ex").value, board = $("board").value;
   const first = words[0] || "";
   let out = companies.filter((c) =>
     (!ind || c.ind === ind) &&
+    (board === "any" || (board === "sme") === c.sme) &&
     (ex === "any" || (ex === "nse" && c.nse) || (ex === "both" && c.nse && c.bse) || (ex === "bseonly" && c.bse && !c.nse)) &&
     words.every((w) => c.hay.includes(w)));
   if (first) {
@@ -630,7 +671,7 @@ function render() { renderResults(); renderWatch(); }
 function renderResults() {
   if (!companies.length) { $("results").innerHTML = `<div class="empty">No company list loaded yet.</div>`; $("bulkBar").hidden = true; return; }
   const all = search(), shown = all.slice(0, MAX_RESULTS);
-  const narrowed = $("ind").value || $("q").value.trim() || $("ex").value !== "any";
+  const narrowed = $("ind").value || $("q").value.trim() || $("ex").value !== "any" || $("board").value !== "any";
   const todo = all.filter((c) => !inWatch(c)).length;
   $("bulkBar").hidden = !narrowed || !todo || isMarket() || all.length > 1500;
   $("bulkText").textContent = `${all.length.toLocaleString("en-IN")} ${$("ind").value ? `companies in ${$("ind").value}` : "matching companies"}` +
@@ -641,7 +682,7 @@ function renderResults() {
     <div class="row">
       <div>
         <div class="name" title="${esc(c.name)}">${esc(c.name)}</div>
-        <div class="meta">${exTags(c.nse, c.bse)}${c.ind ? `<span>${esc(c.ind)}</span>` : ""}${c.mcap ? `<span>${crore(c.mcap)}</span>` : ""}${listsOf(c).filter((n) => n !== cur).map((n) => `<span class="tag inlist">${esc(n)}</span>`).join("")}</div>
+        <div class="meta">${c.sme ? `<span class="tag mkt">SME</span>` : ""}${exTags(c.nse, c.bse)}${c.ind ? `<span>${esc(c.ind)}</span>` : ""}${c.mcap ? `<span>${crore(c.mcap)}</span>` : ""}${listsOf(c).filter((n) => n !== cur).map((n) => `<span class="tag inlist">${esc(n)}</span>`).join("")}</div>
       </div>
       ${inWatch(c) ? `<span class="tag good">In ${esc(cur)}</span>` : isMarket() ? "" : `<button class="btn small" data-add="${i}">Add</button>`}
     </div>`).join("") +
@@ -666,7 +707,7 @@ function renderWatch() {
   if (isMarket()) {
     $("watch").innerHTML = `<div class="market">
       <span class="tag mkt" style="justify-self:start">Whole market</span>
-      <div>This list follows <b>every NSE-listed company</b>${(rules[cur].industries || []).length ? ` in <b>${esc(rules[cur].industries.join(", "))}</b>` : ""}${rules[cur].min_mcap ? ` with market cap of at least <b>₹${Number(rules[cur].min_mcap).toLocaleString("en-IN")} Cr</b>` : ""}.</div>
+      <div>This list follows <b>every NSE ${{ sme: "SME", all: "mainboard and SME" }[rules[cur].board] || "mainboard"} company</b>${(rules[cur].industries || []).length ? ` in <b>${esc(rules[cur].industries.join(", "))}</b>` : ""}${rules[cur].min_mcap ? ` with market cap of at least <b>₹${Number(rules[cur].min_mcap).toLocaleString("en-IN")} Cr</b>` : ""}.</div>
       <div>Alerts on: <b>${esc(ruleSummary(rules[cur]).split(": ").slice(1).join(": "))}</b>.</div>
       <div class="status">No stocks to pick here. Use <b>Change</b> above to set the announcement types, industries and minimum market cap. At most 30 separate alerts per check; any more arrive as one summary message.</div>
     </div>`;
@@ -682,7 +723,7 @@ function renderWatch() {
     return `<div class="row">
       <div>
         <div class="name" title="${esc(w.name)}">${esc(w.name)}</div>
-        <div class="meta">${exTags(w.nse_symbol, w.bse_code)}${c.ind ? `<span class="hide-sm">${esc(c.ind)}</span>` : ""}${others.map((n) => `<span class="tag inlist">${esc(n)}</span>`).join("")}</div>
+        <div class="meta">${c.sme ? `<span class="tag mkt">SME</span>` : ""}${exTags(w.nse_symbol, w.bse_code)}${c.ind ? `<span class="hide-sm">${esc(c.ind)}</span>` : ""}${others.map((n) => `<span class="tag inlist">${esc(n)}</span>`).join("")}</div>
       </div>
       <button class="btn small" data-rm="${i}" title="Remove from ${esc(cur)}">Remove</button>
     </div>`;
@@ -692,7 +733,7 @@ function renderWatch() {
 
 let timer;
 $("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(renderResults, 120); });
-$("ind").onchange = renderResults; $("ex").onchange = renderResults;
+$("ind").onchange = renderResults; $("ex").onchange = renderResults; $("board").onchange = renderResults;
 
 // ── recent alerts ───────────────────────────────────────────────────────────
 let alertRows = [];
@@ -723,6 +764,7 @@ function renderAlerts() {
       <td class="when">${esc(r.time_ist)}</td>
       <td>${esc(r.stock)}${r.watchlists ? `<div class="det">Lists: ${esc(r.watchlists)}</div>` : ""}</td>
       <td><div class="sub">${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.subject || r.category)}</a>` : esc(r.subject || r.category)}${r.status === "failed" ? ' <span class="tag bad">not sent</span>' : ""}</div>
+          ${r.order_cr ? `<div class="det"><b>Order ₹${Math.round(+r.order_cr).toLocaleString("en-IN")} Cr</b>${r.order_pct_annual ? ` = ${Math.round(+r.order_pct_annual)}% of annual revenue` : ""}${r.order_pct_quarter ? ` · ${Math.round(+r.order_pct_quarter)}% of last quarter` : ""}</div>` : ""}
           ${r.detail && r.detail !== r.subject ? `<div class="det">${esc(r.detail.slice(0, 260))}${r.detail.length > 260 ? "…" : ""}</div>` : ""}</td>
       <td class="hide-sm"><span class="tag">${esc(r.exchange)}</span></td></tr>`).join("") + `</tbody></table>`;
 }
