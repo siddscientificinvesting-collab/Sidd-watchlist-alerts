@@ -4,16 +4,16 @@ on:
   schedule:
     # GitHub cron is in UTC. IST = UTC + 5:30.
     - cron: "*/5 3-10 * * 1-5"       # every 5 min, 08:30-16:25 IST, Mon-Fri (market hours)
-    - cron: "*/30 0-2,11-23 * * 1-5" # every 30 min outside market hours
-    - cron: "0 */2 * * 0,6"          # every 2 hours on weekends
+    - cron: "0 0,12,15,18,21 * * 1-5" # every 3 hours outside market hours: 17:30, 20:30, 23:30, 02:30, 05:30 IST
+    - cron: "0 */3 * * 0,6"           # every 3 hours on weekends
   workflow_dispatch: {}              # "Run workflow" button for a manual check
 
 concurrency:
-  group: watchlist-repo-write
+  group: watchlist-repo-write        # never two runs writing state at once
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: write                    # lets the run commit state, logs and PDFs back
 
 jobs:
   check:
@@ -29,12 +29,12 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Check NSE + BSE for watchlist filings
+      - name: Check NSE for watchlist filings
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          SAVE_PDFS: "0"
-          BSE_ENABLED: "0"
+          EXCHANGES: "NSE"   # BSE blocks GitHub's servers; BSE runs on your PC (bse_offline.bat)
+          SAVE_PDFS: "0"   # PDFs go to Telegram; keep the repo small. Use sync-pdfs on your PC.
         run: python watchlist_alerts.py check
 
       - name: Save state and log
