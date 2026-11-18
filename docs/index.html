@@ -280,7 +280,9 @@ dialog h3 { margin: 0; font-size: 16px; }
     <label class="choice"><input type="radio" name="kind" value="stocks" id="kindStocks" checked>
       <span><b>Stocks I pick</b><small>Add companies one by one, or a whole industry at once.</small></span></label>
     <label class="choice"><input type="radio" name="kind" value="market" id="kindMarket">
-      <span><b>Whole market</b><small>Every NSE company, filtered by announcement type (e.g. all order wins), industry and market cap. No stocks to pick.</small></span></label>
+      <span><b>Whole market: Mainboard</b><small>Every NSE mainboard company (no SME), filtered by announcement type (e.g. all order wins), industry and market cap. No stocks to pick.</small></span></label>
+    <label class="choice"><input type="radio" name="kind" value="sme" id="kindSme">
+      <span><b>Whole market: SME</b><small>Only NSE SME companies (e.g. all SME order wins). Kept separate from mainboard.</small></span></label>
     <div style="display:flex; gap:8px; justify-content:flex-end">
       <button class="btn" value="cancel" formnovalidate>Cancel</button>
       <button class="btn primary" value="ok">Create</button>
@@ -475,8 +477,8 @@ $("newDlg").addEventListener("close", () => {
   if (!n) return;
   if (listNames().includes(n)) { cur = n; render(); toast(`"${n}" already exists`); return; }
   cur = n;
-  if ($("kindMarket").checked) {
-    rules[n] = { scope: "market", mode: "only", types: ["orders"], keywords: [] };
+  if ($("kindMarket").checked || $("kindSme").checked) {
+    rules[n] = { scope: "market", board: $("kindSme").checked ? "sme" : "main", mode: "only", types: ["orders"], keywords: [] };
     render(); $("ruleBtn").click();          // choose types / industries straight away
   } else {
     extraLists.push(n); render();
