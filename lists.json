@@ -1,11 +1,3 @@
 {
- "lists": {
-  "Order book": {
-   "mode": "only",
-   "types": [
-    "capex"
-   ],
-   "keywords": []
-  }
- }
+ "lists": {}
 }
