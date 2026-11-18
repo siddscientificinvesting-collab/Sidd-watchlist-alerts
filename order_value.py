@@ -271,8 +271,11 @@ def order_info(item: dict, pdf: Path | None, session, cache: dict, csv_rev: dict
     info = {"value_cr": value, "note": note}
     rev = company_revenue(item, session, cache, csv_rev) or {}
     info.update({k: rev.get(k) for k in ("annual_cr", "quarter_cr", "quarter_end", "source", "annualised")})
-    if value and rev.get("annual_cr"):
-        info["pct_annual"] = round(100 * value / rev["annual_cr"], 1)
+    if not info.get("annual_cr") and info.get("quarter_cr"):   # new listing: only 1 quarter filed so far
+        info["annual_cr"] = round(4 * info["quarter_cr"], 1)
+        info["annualised"] = True
+    if value and info.get("annual_cr"):
+        info["pct_annual"] = round(100 * value / info["annual_cr"], 1)
     if value and rev.get("quarter_cr"):
         info["pct_quarter"] = round(100 * value / rev["quarter_cr"], 1)
     return info
