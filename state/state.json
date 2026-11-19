@@ -55,6 +55,14 @@
    "quarters": 4,
    "source": "NSE standalone"
   },
+  "AURIONPRO": {
+   "annual_cr": 1489.6,
+   "fetched": "2026-11-19",
+   "quarter_cr": 415.0,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
   "GATEWAY": {
    "annual_cr": 2223.5,
    "fetched": "2026-11-18",
@@ -126,6 +134,15 @@
    "quarters": 4,
    "source": "NSE consolidated"
   },
+  "RMC": {
+   "annual_cr": 360.4,
+   "annualised": true,
+   "fetched": "2026-11-19",
+   "quarter_cr": 37.2,
+   "quarter_end": "2026-06-30",
+   "quarters": 2,
+   "source": "NSE consolidated"
+  },
   "SEAMECLTD": {
    "annual_cr": 1139.2,
    "fetched": "2026-11-18",
@@ -155,6 +172,15 @@
    "quarter_cr": 183.3,
    "quarter_end": "2026-09-30",
    "quarters": 1,
+   "source": "NSE consolidated"
+  },
+  "VIVIANA": {
+   "annual_cr": 380.5,
+   "annualised": true,
+   "fetched": "2026-11-19",
+   "quarter_cr": 72.4,
+   "quarter_end": "2026-06-30",
+   "quarters": 2,
    "source": "NSE consolidated"
   },
   "WSI": {
@@ -578,6 +604,74 @@
    "paired": false,
    "stock": "W S Industries (I)",
    "t": "2026-11-18T19:52:38+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106865775:AURIONPRO": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Aurionpro Solutions",
+   "t": "2026-11-19T10:06:11+05:30",
+   "w": [
+    "additional",
+    "centre",
+    "crore",
+    "data",
+    "engagement",
+    "expands",
+    "global",
+    "hyperscaler",
+    "india",
+    "nearly",
+    "november",
+    "order",
+    "press",
+    "ready",
+    "release",
+    "secures",
+    "southern",
+    "titled"
+   ]
+  },
+  "NSE:106865833:VIVIANA": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Viviana Power Tech",
+   "t": "2026-11-19T10:58:29+05:30",
+   "w": [
+    "amounting",
+    "bagging",
+    "bijli",
+    "client",
+    "contract",
+    "contracts",
+    "crore",
+    "dakshin",
+    "dhbvnl",
+    "four",
+    "haryana",
+    "hundred",
+    "inclusive",
+    "nigam",
+    "only",
+    "orders",
+    "receiving",
+    "rupees",
+    "taxes",
+    "turnkey",
+    "twenty",
+    "vitran"
+   ]
+  },
+  "NSE:106865835:RMC": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "RMC Switchgears",
+   "t": "2026-11-19T10:59:36+05:30",
    "w": [
     "bagging",
     "contracts",
