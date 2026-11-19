@@ -13,6 +13,14 @@
    "quarters": 4,
    "source": "NSE consolidated"
   },
+  "ADANIENSOL": {
+   "annual_cr": 33959.5,
+   "fetched": "2026-11-19",
+   "quarter_cr": 10075.5,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
   "ADVAIT": {
    "annual_cr": 839.4,
    "fetched": "2026-11-18",
@@ -29,6 +37,14 @@
    "quarter_end": "2026-09-30",
    "quarters": 2,
    "source": "NSE standalone"
+  },
+  "APTECHT": {
+   "annual_cr": 529.5,
+   "fetched": "2026-11-19",
+   "quarter_cr": 147.7,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
   },
   "ARMEE": {
    "annual_cr": 698.1,
@@ -97,6 +113,14 @@
    "annual_cr": 360.0,
    "fetched": "2026-11-18",
    "quarter_cr": 86.0,
+   "quarter_end": "2026-09-30",
+   "quarters": 4,
+   "source": "NSE consolidated"
+  },
+  "NBCC": {
+   "annual_cr": 13237.5,
+   "fetched": "2026-11-19",
+   "quarter_cr": 3395.8,
    "quarter_end": "2026-09-30",
    "quarters": 4,
    "source": "NSE consolidated"
@@ -672,6 +696,75 @@
    "paired": false,
    "stock": "RMC Switchgears",
    "t": "2026-11-19T10:59:36+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106865922:NBCC": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "NBCC (India)",
+   "t": "2026-11-19T11:45:51+05:30",
+   "w": [
+    "amounting",
+    "approx",
+    "business",
+    "course",
+    "orders",
+    "ordinary",
+    "received",
+    "updates",
+    "work"
+   ]
+  },
+  "NSE:106866005:AURIONPRO": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Aurionpro Solutions",
+   "t": "2026-11-19T12:55:52+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106866091:ADANIENSOL": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Adani Energy Solutions",
+   "t": "2026-11-19T14:28:55+05:30",
+   "w": [
+    "bihar",
+    "november",
+    "press",
+    "project",
+    "release",
+    "titled",
+    "transmission",
+    "wins"
+   ]
+  },
+  "NSE:106866118:APTECHT": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Aptech",
+   "t": "2026-11-19T14:54:24+05:30",
+   "w": [
+    "bagging",
+    "contracts",
+    "orders",
+    "receiving"
+   ]
+  },
+  "NSE:106866127:APTECHT": {
+   "ex": "NSE",
+   "paired": false,
+   "stock": "Aptech",
+   "t": "2026-11-19T15:01:18+05:30",
    "w": [
     "bagging",
     "contracts",
